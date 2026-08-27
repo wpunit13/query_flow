@@ -8,6 +8,7 @@ import {
   styleApiEdges,
   LAYOUT_MODES,
   applyVisibilityFilter,
+  ensureNodePositions,
 } from '../utils/dagreLayout';
 import { getConnectedElements } from '../utils/graphVisibility';
 import {
@@ -22,6 +23,8 @@ import {
   applyDiffToNodes,
   applyDiffToEdges,
 } from '../utils/graphDiff';
+import { computeSearchMatches, getSearchVisibilityIds } from '../utils/searchGraph';
+import { getNodeDimensions } from '../utils/dagreLayout';
 
 const DEFAULT_SQL =
   'WITH cte1 AS (SELECT id, name FROM users JOIN orders ON users.id = orders.user_id) SELECT id FROM cte1';
@@ -69,48 +72,81 @@ export function useLineageGraph(fitGraphToView) {
   const [baselineGraph, setBaselineGraph] = useState(null);
   const [diffSummary, setDiffSummary] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [filterNoMatches, setFilterNoMatches] = useState(false);
 
   const searchInputRef = useRef(null);
 
-  const relayout = useCallback(
+  /** Layout full graph and persist positions on baseNodes/baseEdges. */
+  const layoutFullGraph = useCallback(
     (nodeList, edgeList, mode = layoutMode) => {
+      const expandedNodes = nodeList.map((n) => ({ ...n, hidden: false }));
+      const expandedEdges = edgeList.map((e) => ({ ...e, hidden: false }));
       const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-        nodeList,
-        edgeList,
+        expandedNodes,
+        expandedEdges,
         mode
       );
-      setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
+      const positioned = ensureNodePositions(layoutedNodes);
+      setBaseNodes(positioned);
+      setBaseEdges(layoutedEdges);
+      return { nodes: positioned, edges: layoutedEdges };
     },
-    [layoutMode, setNodes, setEdges]
+    [layoutMode, setBaseNodes, setBaseEdges]
   );
 
-  const applyBranchAndFocus = useCallback(
-    (nodeList, edgeList) => {
-      let visibleIds = getBranchFilterVisibleIds(nodeList, edgeList, branchFilter);
-      let filteredNodes = nodeList;
-      let filteredEdges = edgeList;
+  /** Apply branch/focus filters using base graph positions (no relayout). */
+  const applyDisplayFromBase = useCallback(
+    (mode = layoutMode, focusOverride = focusMode) => {
+      if (!baseNodes.length) return;
+
+      let visibleIds = getBranchFilterVisibleIds(baseNodes, baseEdges, branchFilter);
+      const noMatches = Boolean(branchFilter.trim() && visibleIds && visibleIds.size === 0);
+      setFilterNoMatches(noMatches);
+      if (noMatches) visibleIds = null;
+
+      let displayNodes = baseNodes;
+      let displayEdges = baseEdges;
 
       if (visibleIds) {
-        const result = applyVisibilityFilter(nodeList, edgeList, visibleIds);
-        filteredNodes = result.nodes;
-        filteredEdges = result.edges;
+        const result = applyVisibilityFilter(baseNodes, baseEdges, visibleIds);
+        displayNodes = result.nodes;
+        displayEdges = result.edges;
       }
 
-      if (focusMode && selectedNodeId) {
+      if (focusOverride && selectedNodeId) {
         const focusSet =
-          focusMode === 'upstream'
-            ? getUpstreamNodes(selectedNodeId, edgeList)
-            : getDownstreamNodes(selectedNodeId, edgeList);
+          focusOverride === 'upstream'
+            ? getUpstreamNodes(selectedNodeId, baseEdges)
+            : getDownstreamNodes(selectedNodeId, baseEdges);
         focusSet.add(selectedNodeId);
-        const focused = applyVisibilityFilter(filteredNodes, filteredEdges, focusSet);
-        filteredNodes = focused.nodes;
-        filteredEdges = focused.edges;
+        const focused = applyVisibilityFilter(displayNodes, displayEdges, focusSet);
+        displayNodes = focused.nodes;
+        displayEdges = focused.edges;
       }
 
-      return { filteredNodes, filteredEdges };
+      setNodes(
+        ensureNodePositions(displayNodes).map((n) => ({
+          ...n,
+          data: {
+            ...n.data,
+            isSearchMatch: false,
+            isActiveSearchMatch: false,
+            searchQuery: '',
+          },
+        }))
+      );
+      setEdges(displayEdges);
     },
-    [branchFilter, focusMode, selectedNodeId]
+    [
+      baseNodes,
+      baseEdges,
+      branchFilter,
+      focusMode,
+      selectedNodeId,
+      layoutMode,
+      setNodes,
+      setEdges,
+    ]
   );
 
   const applyGraphHighlight = useCallback(
@@ -214,23 +250,17 @@ export function useLineageGraph(fitGraphToView) {
         );
       }
 
-      setBaseNodes(diffNodes);
       setBaseEdges(diffEdges);
 
-      const { filteredNodes, filteredEdges } = applyBranchAndFocus(diffNodes, diffEdges);
-      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-        filteredNodes,
-        filteredEdges,
-        layoutMode
-      );
+      layoutFullGraph(diffNodes, diffEdges, layoutMode);
+      applyDisplayFromBase(layoutMode, null);
 
-      setNodes(
-        layoutedNodes.map((n) => ({
+      setNodes((nds) =>
+        nds.map((n) => ({
           ...n,
           style: { opacity: 1, transition: 'opacity 0.3s ease' },
         }))
       );
-      setEdges(layoutedEdges);
       fitGraphToView();
     } catch (error) {
       alert(error.message || 'Error parsing SQL. Is your FastAPI server running?');
@@ -241,6 +271,7 @@ export function useLineageGraph(fitGraphToView) {
 
   const handleResetCanvas = () => {
     setBranchFilter('');
+    setFilterNoMatches(false);
     setFocusMode(null);
     setSelectedNodeId(null);
     setSelectedColumn(null);
@@ -268,82 +299,41 @@ export function useLineageGraph(fitGraphToView) {
       style: { ...DEFAULT_EDGE_STYLE, transition: 'all 0.3s ease' },
     }));
 
-    relayout(resetNodes, resetEdges);
+    layoutFullGraph(resetNodes, resetEdges, layoutMode);
+    applyDisplayFromBase(layoutMode);
     fitGraphToView();
   };
 
   const handleLayoutChange = (mode) => {
     setLayoutMode(mode);
-    const { filteredNodes, filteredEdges } = applyBranchAndFocus(baseNodes, baseEdges);
-    relayout(filteredNodes, filteredEdges, mode);
+    layoutFullGraph(baseNodes, baseEdges, mode);
+    applyDisplayFromBase(mode);
     fitGraphToView();
   };
 
   const handleBranchFilterChange = (value) => {
     setBranchFilter(value);
-    const { filteredNodes, filteredEdges } = applyBranchAndFocus(baseNodes, baseEdges);
-    // applyBranchAndFocus uses stale branchFilter - need to compute with new value
-    let visibleIds = getBranchFilterVisibleIds(baseNodes, baseEdges, value);
-    let fn = baseNodes;
-    let fe = baseEdges;
-    if (visibleIds) {
-      const r = applyVisibilityFilter(baseNodes, baseEdges, visibleIds);
-      fn = r.nodes;
-      fe = r.edges;
-    }
-    if (focusMode && selectedNodeId) {
-      const focusSet =
-        focusMode === 'upstream'
-          ? getUpstreamNodes(selectedNodeId, baseEdges)
-          : getDownstreamNodes(selectedNodeId, baseEdges);
-      focusSet.add(selectedNodeId);
-      const r = applyVisibilityFilter(fn, fe, focusSet);
-      fn = r.nodes;
-      fe = r.edges;
-    }
-    relayout(fn, fe);
-    fitGraphToView();
+    if (!baseNodes.length || searchQuery.trim()) return;
+    applyDisplayFromBase(layoutMode, focusMode);
   };
 
   const handleFocusUpstream = () => {
     if (!selectedNodeId) return;
     setFocusMode('upstream');
-    const focusSet = getUpstreamNodes(selectedNodeId, baseEdges);
-    focusSet.add(selectedNodeId);
-    let fn = baseNodes;
-    let fe = baseEdges;
-    const visibleIds = getBranchFilterVisibleIds(baseNodes, baseEdges, branchFilter);
-    if (visibleIds) {
-      const r = applyVisibilityFilter(fn, fe, visibleIds);
-      fn = r.nodes;
-      fe = r.edges;
-    }
-    const r = applyVisibilityFilter(fn, fe, focusSet);
-    relayout(r.nodes, r.edges);
+    applyDisplayFromBase(layoutMode, 'upstream');
     fitGraphToView();
   };
 
   const handleFocusDownstream = () => {
     if (!selectedNodeId) return;
     setFocusMode('downstream');
-    const focusSet = getDownstreamNodes(selectedNodeId, baseEdges);
-    focusSet.add(selectedNodeId);
-    let fn = baseNodes;
-    let fe = baseEdges;
-    const visibleIds = getBranchFilterVisibleIds(baseNodes, baseEdges, branchFilter);
-    if (visibleIds) {
-      const r = applyVisibilityFilter(fn, fe, visibleIds);
-      fn = r.nodes;
-      fe = r.edges;
-    }
-    const r = applyVisibilityFilter(fn, fe, focusSet);
-    relayout(r.nodes, r.edges);
+    applyDisplayFromBase(layoutMode, 'downstream');
     fitGraphToView();
   };
 
   const handleClearFocus = () => {
     setFocusMode(null);
-    handleBranchFilterChange(branchFilter);
+    applyDisplayFromBase(layoutMode, null);
   };
 
   const handleToggleDiffMode = () => {
@@ -358,52 +348,94 @@ export function useLineageGraph(fitGraphToView) {
 
     if (!query.trim()) {
       setSearchResults([]);
-      setNodes((nds) =>
-        nds.map((n) => ({ ...n, data: { ...n.data, isSearchMatch: false } }))
-      );
+      setSearchIndex(0);
+      applyDisplayFromBase(layoutMode, focusMode);
       return;
     }
 
-    const lowerQuery = query.toLowerCase();
-    const matches = [];
+    if (!baseNodes.length) {
+      setSearchResults([]);
+      return;
+    }
 
-    setNodes((nds) =>
-      nds.map((n) => {
-        const colMatch =
-          n.data.columns &&
-          n.data.columns.some((col) => col.toLowerCase().includes(lowerQuery));
-        const lineageMatch =
-          n.data.column_lineage &&
-          n.data.column_lineage.some(
-            (entry) =>
-              entry.name?.toLowerCase().includes(lowerQuery) ||
-              entry.sources?.some((src) => src.toLowerCase().includes(lowerQuery))
-          );
-        const isMatch =
-          (n.data.label && n.data.label.toLowerCase().includes(lowerQuery)) ||
-          colMatch ||
-          lineageMatch;
-        if (isMatch) matches.push(n.id);
-        return { ...n, data: { ...n.data, isSearchMatch: isMatch } };
-      })
-    );
-
+    const matches = computeSearchMatches(baseNodes, query);
     setSearchResults(matches);
     setSearchIndex(0);
+
+    if (matches.length === 0) {
+      applyDisplayFromBase(layoutMode, focusMode);
+      return;
+    }
+
+    const visibleIds = getSearchVisibilityIds(matches, baseEdges);
+    const { nodes: filteredNodes, edges: filteredEdges } = applyVisibilityFilter(
+      baseNodes,
+      baseEdges,
+      visibleIds
+    );
+    const displayNodes = ensureNodePositions(filteredNodes);
+
+    setNodes(
+      displayNodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          isSearchMatch: matches.includes(n.id),
+          isActiveSearchMatch: n.id === matches[0],
+          searchQuery: query,
+        },
+      }))
+    );
+    setEdges(filteredEdges);
+
+    if (rfInstance) {
+      const targetNode = displayNodes.find((n) => n.id === matches[0]);
+      if (targetNode?.position) {
+        setTimeout(() => {
+          const { width, height } = getNodeDimensions(targetNode);
+          rfInstance.setCenter(
+            targetNode.position.x + width / 2,
+            targetNode.position.y + height / 2,
+            { zoom: 1.2, duration: 600 }
+          );
+        }, 50);
+      }
+    }
+  };
+
+  const panToSearchResult = (index) => {
+    if (!rfInstance || !searchResults.length) return;
+    const targetId = searchResults[index];
+    const targetNode =
+      rfInstance.getNode(targetId) ||
+      nodes.find((n) => n.id === targetId) ||
+      baseNodes.find((n) => n.id === targetId);
+
+    if (!targetNode?.position) return;
+
+    const { width, height } = getNodeDimensions(targetNode);
+    rfInstance.setCenter(
+      targetNode.position.x + width / 2,
+      targetNode.position.y + height / 2,
+      { zoom: 1.2, duration: 800 }
+    );
   };
 
   const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter' && searchResults.length > 0 && rfInstance) {
-      const nextIndex = (searchIndex + 1) % searchResults.length;
-      setSearchIndex(nextIndex);
-      const targetNode = rfInstance.getNode(searchResults[searchIndex]);
-      if (targetNode) {
-        rfInstance.setCenter(
-          targetNode.position.x + 110,
-          targetNode.position.y + 75,
-          { zoom: 1.2, duration: 800 }
-        );
-      }
+    if (e.key === 'Enter' && searchResults.length > 0) {
+      e.preventDefault();
+      const targetId = searchResults[searchIndex];
+      panToSearchResult(searchIndex);
+      setNodes((nds) =>
+        nds.map((n) => ({
+          ...n,
+          data: {
+            ...n.data,
+            isActiveSearchMatch: n.id === targetId,
+          },
+        }))
+      );
+      setSearchIndex((searchIndex + 1) % searchResults.length);
     }
   };
 
@@ -499,5 +531,6 @@ export function useLineageGraph(fitGraphToView) {
     searchInputRef,
     fitGraphToView,
     handleClearSelection,
+    filterNoMatches,
   };
 }

@@ -95,6 +95,7 @@ export default function App() {
             diffSummary={graph.diffSummary}
             selectedNodeId={graph.selectedNodeId}
             onShowShortcuts={() => graph.setShowShortcuts(true)}
+            filterNoMatches={graph.filterNoMatches}
           />
           <BreadcrumbBar
             breadcrumb={graph.breadcrumb}

@@ -27,6 +27,7 @@ export default function GraphToolbar({
   diffSummary,
   selectedNodeId,
   onShowShortcuts,
+  filterNoMatches,
 }) {
   return (
     <div
@@ -73,12 +74,15 @@ export default function GraphToolbar({
         onChange={(e) => onBranchFilterChange(e.target.value)}
         style={{
           padding: '6px 10px',
-          border: `1px solid ${theme.border}`,
+          border: `1px solid ${filterNoMatches ? '#f87171' : theme.border}`,
           borderRadius: '6px',
           fontSize: '12px',
           width: '140px',
         }}
       />
+      {filterNoMatches && (
+        <span style={{ fontSize: '11px', color: '#dc2626' }}>No matches</span>
+      )}
 
       <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
 

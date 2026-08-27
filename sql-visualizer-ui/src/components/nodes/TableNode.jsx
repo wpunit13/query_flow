@@ -12,6 +12,8 @@ export default function TableNode({ id, data }) {
 
   const hasColumns = data.columns && data.columns.length > 0;
   const isHighlighted = data.isSearchMatch;
+  const isActiveSearch = data.isActiveSearchMatch;
+  const searchLower = data.searchQuery?.toLowerCase() || '';
   const isColumnSource = data.isColumnSource;
   const hasIncoming = getEdges().some((e) => e.target === id);
   const kindLabel = kindLabels[data.kind] || data.kind;
@@ -19,11 +21,13 @@ export default function TableNode({ id, data }) {
 
   const borderColor = data.diffStatus === 'added'
     ? '#10b981'
-    : isHighlighted
-      ? theme.highlight
-      : isColumnSource
-        ? theme.joinBg
-        : theme.border;
+    : isActiveSearch
+      ? '#d97706'
+      : isHighlighted
+        ? theme.highlight
+        : isColumnSource
+          ? theme.joinBg
+          : theme.border;
 
   const lineageByColumn = {};
   if (data.column_lineage) {
@@ -41,9 +45,11 @@ export default function TableNode({ id, data }) {
         minWidth: '240px',
         boxShadow: data.diffStatus === 'added'
           ? '0 0 12px rgba(16, 185, 129, 0.35)'
-          : isHighlighted
-            ? `0 0 15px ${theme.highlight}80`
-            : '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+          : isActiveSearch
+            ? `0 0 20px ${theme.highlight}`
+            : isHighlighted
+              ? `0 0 15px ${theme.highlight}80`
+              : '0 4px 6px -1px rgb(0 0 0 / 0.1)',
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.3s ease',
       }}
@@ -162,11 +168,15 @@ export default function TableNode({ id, data }) {
         </div>
       </div>
 
-      {expanded && hasColumns && (
+      {(expanded || isHighlighted) && hasColumns && (
         <div style={{ padding: '8px 0', fontSize: '12px' }}>
           {data.columns.map((col, idx) => {
             const sources = lineageByColumn[col] || [];
             const isSelectedCol = data.highlightedColumn === col;
+            const isSearchCol =
+              searchLower &&
+              typeof col === 'string' &&
+              col.toLowerCase().includes(searchLower);
             return (
               <div
                 key={idx}
@@ -180,10 +190,17 @@ export default function TableNode({ id, data }) {
                   borderBottom:
                     idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.bg}`,
                   cursor: 'pointer',
-                  background: isSelectedCol ? '#fef3c7' : 'transparent',
+                  background: isSelectedCol || isSearchCol ? '#fef3c7' : 'transparent',
                 }}
               >
-                <span style={{ fontWeight: '600', color: theme.textMain }}>{col}</span>
+                <span
+                  style={{
+                    fontWeight: '600',
+                    color: isSearchCol ? '#d97706' : theme.textMain,
+                  }}
+                >
+                  {col}
+                </span>
                 <span style={{ fontSize: '9px', color: theme.primary, marginLeft: '6px' }}>
                   trace
                 </span>

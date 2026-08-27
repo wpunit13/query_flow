@@ -79,10 +79,19 @@ export default function StudioHeader({
                   marginLeft: '8px',
                 }}
               >
-                {searchIndex === 0 && searchResults.length > 0
-                  ? searchResults.length
-                  : searchIndex}{' '}
-                / {searchResults.length} (Enter ↵)
+                {searchIndex + 1} / {searchResults.length} (Enter ↵)
+              </span>
+            )}
+            {searchQuery.trim() && searchResults.length === 0 && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: '#dc2626',
+                  whiteSpace: 'nowrap',
+                  marginLeft: '8px',
+                }}
+              >
+                No matches
               </span>
             )}
           </div>

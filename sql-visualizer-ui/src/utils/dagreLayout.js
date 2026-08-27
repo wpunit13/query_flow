@@ -6,6 +6,17 @@ export const LAYOUT_MODES = {
   RADIAL: 'RADIAL',
 };
 
+export const ensureNodePositions = (nodes) =>
+  nodes.map((node) => ({
+    ...node,
+    position:
+      node.position &&
+      Number.isFinite(node.position.x) &&
+      Number.isFinite(node.position.y)
+        ? node.position
+        : { x: 0, y: 0 },
+  }));
+
 export const getNodeDimensions = (node) => {
   if (node.type === 'joinNode') return { width: 180, height: 40 };
   const colCount = node.data?.columns?.length || 0;
@@ -62,7 +73,12 @@ function layoutRadial(nodes, edges) {
   const centerY = 450;
 
   const layoutedNodes = nodes.map((node) => {
-    if (node.hidden) return node;
+    if (node.hidden) {
+      return {
+        ...node,
+        position: node.position ?? { x: 0, y: 0 },
+      };
+    }
     const level = levels.get(node.id) || 0;
     const group = byLevel[level] || [node];
     const index = group.findIndex((n) => n.id === node.id);
@@ -106,8 +122,19 @@ export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) 
   dagre.layout(dagreGraph);
 
   const layoutedNodes = nodes.map((node) => {
-    if (node.hidden) return node;
+    if (node.hidden) {
+      return {
+        ...node,
+        position: node.position ?? { x: 0, y: 0 },
+      };
+    }
     const nodeWithPosition = dagreGraph.node(node.id);
+    if (!nodeWithPosition) {
+      return {
+        ...node,
+        position: node.position ?? { x: 0, y: 0 },
+      };
+    }
     const { width, height } = getNodeDimensions(node);
     return {
       ...node,

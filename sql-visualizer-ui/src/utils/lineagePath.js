@@ -107,12 +107,15 @@ export function getBranchFilterVisibleIds(nodes, edges, filterText) {
 
   const lower = filterText.toLowerCase();
   const matchIds = nodes
-    .filter(
-      (n) =>
-        n.data?.label?.toLowerCase().includes(lower) ||
+    .filter((n) => {
+      const label = n.data?.label?.toLowerCase();
+      const qualified = n.data?.qualified_name?.toLowerCase();
+      return (
+        (label && label.includes(lower)) ||
         n.id.toLowerCase().includes(lower) ||
-        n.data?.qualified_name?.toLowerCase().includes(lower)
-    )
+        (qualified && qualified.includes(lower))
+      );
+    })
     .map((n) => n.id);
 
   if (matchIds.length === 0) return new Set();
