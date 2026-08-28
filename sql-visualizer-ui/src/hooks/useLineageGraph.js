@@ -10,6 +10,7 @@ import {
   LAYOUT_MODES,
   applyVisibilityFilter,
   ensureNodePositions,
+  adjustLayoutForExpandedToggle,
 } from '../utils/dagreLayout';
 import { getConnectedElements } from '../utils/graphVisibility';
 import {
@@ -26,6 +27,15 @@ import {
 } from '../utils/graphDiff';
 import { computeSearchMatches, getSearchVisibilityIds } from '../utils/searchGraph';
 import { getNodeDimensions } from '../utils/dagreLayout';
+import {
+  buildClientExportPayload,
+  downloadCsvFromLineage,
+  downloadGraphPdf,
+  downloadGraphPng,
+  downloadGraphSvg,
+  downloadJsonExport,
+  downloadOpenLineageExport,
+} from '../utils/exportGraph';
 
 const DEFAULT_SQL =
   'WITH cte1 AS (SELECT id, name FROM users JOIN orders ON users.id = orders.user_id) SELECT id FROM cte1';
@@ -57,7 +67,7 @@ const FALLBACK_DIALECTS = [
   { id: 'duckdb', label: 'DuckDB', limitations: '' },
 ];
 
-export function useLineageGraph(fitGraphToView) {
+export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [baseNodes, setBaseNodes] = useState([]);
@@ -91,6 +101,8 @@ export function useLineageGraph(fitGraphToView) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [filterNoMatches, setFilterNoMatches] = useState(false);
 
+  const [lastParseResult, setLastParseResult] = useState(null);
+  const embedBootstrapped = useRef(false);
   const searchInputRef = useRef(null);
   const sqlEditorRef = useRef(null);
   const sqlRef = useRef(DEFAULT_SQL);
@@ -262,6 +274,7 @@ export function useLineageGraph(fitGraphToView) {
 
     try {
       const data = await parseSql(sqlToParse, dialect);
+      setLastParseResult(data);
       setWarnings(data.warnings || []);
 
       const styledEdges = styleApiEdges(data.edges);
@@ -390,6 +403,7 @@ export function useLineageGraph(fitGraphToView) {
     setSelectedColumn(null);
     setBreadcrumb([]);
     setDiffSummary(null);
+    setLastParseResult(null);
     if (diffMode) setBaselineGraph(null);
 
     const resetNodes = baseNodes.map((n) => ({
@@ -399,6 +413,7 @@ export function useLineageGraph(fitGraphToView) {
       data: {
         ...n.data,
         collapsed: false,
+        expanded: false,
         isLineageHighlight: false,
         isColumnSource: false,
         highlightedColumn: null,
@@ -600,6 +615,34 @@ export function useLineageGraph(fitGraphToView) {
     clearHighlight();
   }, [clearHighlight]);
 
+  const onNodeExpandedToggle = useCallback(
+    (nodeId) => {
+      if (!baseNodes.length) return;
+      const adjusted = adjustLayoutForExpandedToggle(
+        baseNodes,
+        baseEdges,
+        nodeId,
+        layoutMode
+      );
+      setBaseNodes(adjusted);
+      applyDisplayFromBase(layoutMode, focusMode, {
+        baseNodes: adjusted,
+        baseEdges,
+      });
+      setTimeout(() => {
+        rfInstance?.updateNodeInternals?.(nodeId);
+      }, 0);
+    },
+    [
+      baseNodes,
+      baseEdges,
+      layoutMode,
+      focusMode,
+      applyDisplayFromBase,
+      rfInstance,
+    ]
+  );
+
   const handleInit = (instance) => {
     setRfInstance(instance);
     if (nodes.length > 0) fitGraphToView(instance);
@@ -641,6 +684,55 @@ export function useLineageGraph(fitGraphToView) {
     handleBranchFilterChange(branchFilter);
   };
 
+  const handleExportPng = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphPng(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportSvg = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphSvg(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphPdf(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportJson = useCallback(() => {
+    if (!lastParseResult) throw new Error('No lineage data — render a query first');
+    const payload = buildClientExportPayload(
+      lastParseResult,
+      getSqlForAction(),
+      dialect
+    );
+    downloadJsonExport(payload);
+  }, [lastParseResult, dialect]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!lastParseResult) throw new Error('No lineage data — render a query first');
+    downloadCsvFromLineage(lastParseResult);
+  }, [lastParseResult]);
+
+  const handleExportOpenLineage = useCallback(async () => {
+    const sqlToExport = getSqlForAction();
+    if (!sqlToExport?.trim()) throw new Error('No SQL to export');
+    await downloadOpenLineageExport(sqlToExport, dialect);
+  }, [dialect]);
+
+  useEffect(() => {
+    if (!embedOptions?.embed || embedBootstrapped.current) return;
+    embedBootstrapped.current = true;
+    if (embedOptions.dialect) {
+      setDialect(embedOptions.dialect);
+    }
+    if (embedOptions.sql) {
+      sqlRef.current = embedOptions.sql;
+      setSql(embedOptions.sql);
+      handleParseSql();
+    }
+  }, [embedOptions, handleParseSql]);
+
   return {
     nodes,
     edges,
@@ -669,6 +761,7 @@ export function useLineageGraph(fitGraphToView) {
     onNodeClick,
     onPaneClick,
     onColumnSelect,
+    onNodeExpandedToggle,
     handleInit,
     warnings,
     layoutMode,
@@ -699,5 +792,12 @@ export function useLineageGraph(fitGraphToView) {
     handleEnterExplore,
     handleToggleStudioMode,
     handleToggleZen,
+    handleExportPng,
+    handleExportSvg,
+    handleExportPdf,
+    handleExportJson,
+    handleExportCsv,
+    handleExportOpenLineage,
+    embedMode: Boolean(embedOptions?.embed),
   };
 }

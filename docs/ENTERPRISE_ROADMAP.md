@@ -83,19 +83,21 @@ Dialect is currently hardcoded to `bigquery` in the UI.
 
 ---
 
-## 8. Export & Embed
+## 8. Export & Embed — Done (Phase 1)
+
+**Status:** Graph export (PNG/SVG/PDF), lineage JSON/CSV, OpenLineage API, `POST /api/v1/lineage` alias, embed mode (`?embed=1`). See `docs/EMBED.md`.
 
 ### Tasks
 
-- [ ] Export DAG as PNG
-- [ ] Export DAG as SVG
-- [ ] Export DAG as PDF
-- [ ] Export lineage as JSON
-- [ ] Export lineage as CSV
-- [ ] Export lineage as OpenLineage format
-- [ ] Export lineage as Marquez-compatible format
-- [ ] Embeddable widget for internal portals
-- [ ] API-first `POST /v1/lineage` with standard response schema for CI/CD gates
+- [x] Export DAG as PNG
+- [x] Export DAG as SVG
+- [x] Export DAG as PDF
+- [x] Export lineage as JSON
+- [x] Export lineage as CSV
+- [x] Export lineage as OpenLineage format
+- [x] Export lineage as Marquez-compatible format (same OpenLineage event JSON)
+- [x] Embeddable widget for internal portals (`?embed=1` + iframe)
+- [x] API-first `POST /api/v1/lineage` with standard response schema for CI/CD gates
 
 ---
 
@@ -181,7 +183,9 @@ frontend/
 
 ---
 
-## 12. API Contract Versioning
+## 12. API Contract Versioning — Done
+
+**Status:** Implemented on `develop` — `/api/v1/*` routes, `GET /api/v1/version`, legacy `/api/*` deprecation headers, Pydantic contract with `stats`, enums, and OpenAPI docs at `/docs`.
 
 ### Target response shape
 
@@ -307,14 +311,14 @@ docker compose -f deploy/docker-compose.yml up --build
 - [ ] Rate limiting and request size caps
 - [ ] Audit logging
 - [ ] Parser test suite (pytest + golden files)
-- [ ] Initial API schema (see section 12)
+- [x] Initial API schema (section 12 — `/api/v1/*`, contract `1.0`, stats, deprecation policy)
 
 ### P1 Product
 
 - [ ] Dialect selector (section 6)
 - [ ] Monaco / CodeMirror editor (section 13)
 - [ ] Column-level lineage (section 4)
-- [ ] Export PNG / JSON / OpenLineage (section 8)
+- [x] Export PNG / JSON / OpenLineage (section 8)
 - [ ] Save / share workspaces (section 7)
 
 ### P2 Enterprise
@@ -342,6 +346,8 @@ docker compose -f deploy/docker-compose.yml up --build
 
 | Date | Item | Notes |
 |---|---|---|
+| 2026-08-28 | Section 8 — Export & embed | PNG/SVG/PDF export, JSON/CSV/OpenLineage API, embed mode, `/api/v1/lineage` |
+| 2026-08-28 | Section 12 — API contract versioning | `/api/v1/*`, `GET /api/v1/version`, `stats` block, NodeKind/EdgeType enums, legacy deprecation headers |
 | 2026-08-28 | Section 6 — Multi-dialect | Dialect selector, detect API, editor highlighting map |
 | 2026-08-28 | Section 13 — Error UX | CodeMirror editor, inline errors with line/col, jump-to-error, warning panel |
 | 2026-08-27 | Section 9 — Advanced graph UX | Layouts, filter, focus, breadcrumbs, shortcuts, diff, column trace |

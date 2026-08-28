@@ -1,5 +1,3 @@
-import time
-
 import sqlglot
 from fastapi import APIRouter, HTTPException
 
@@ -35,5 +33,17 @@ def build_lineage_router(prefix: str, tags: list[str]) -> APIRouter:
             raise HTTPException(status_code=400, detail=format_parse_error(e, request.sql))
 
         return LineageResponse(**result)
+
+    @router.post(
+        "/lineage",
+        response_model=LineageResponse,
+        responses={400: {"model": ParseErrorDetail}},
+        summary="Parse SQL into lineage (CI/CD alias for parse-sql)",
+        description=(
+            "Alias for `POST /api/v1/parse-sql` with the same versioned response schema."
+        ),
+    )
+    def lineage(request: SQLRequest) -> LineageResponse:
+        return parse_sql(request)
 
     return router

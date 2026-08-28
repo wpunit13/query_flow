@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.api.routes.dialects import build_dialects_router
+from backend.api.routes.export import router as export_router
 from backend.api.routes.lineage import build_lineage_router
 from backend.api.routes.meta import router as meta_router
 from backend.api.versioning import LegacyApiDeprecationMiddleware
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(meta_router)
     app.include_router(build_lineage_router("/api/v1", ["lineage-v1"]))
     app.include_router(build_dialects_router("/api/v1", ["dialects-v1"]))
+    app.include_router(export_router)
     app.include_router(build_lineage_router("/api", ["lineage-legacy"]))
     app.include_router(build_dialects_router("/api", ["dialects-legacy"]))
 

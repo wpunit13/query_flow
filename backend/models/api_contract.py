@@ -59,6 +59,10 @@ class ApiVersionInfo(BaseModel):
             "GET /api/v1/dialects",
             "POST /api/v1/detect-dialect",
             "POST /api/v1/parse-sql",
+            "POST /api/v1/lineage",
+            "POST /api/v1/export/json",
+            "POST /api/v1/export/csv",
+            "POST /api/v1/export/openlineage",
         ],
         description="Current stable v1 endpoints",
     )

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { theme, kindLabels, kindColors } from '../../theme';
 import { TableIcon, EyeIcon, EyeOffIcon } from '../../icons';
@@ -6,9 +5,10 @@ import { toggleNodeCollapse } from '../../utils/graphVisibility';
 import { useGraphActions } from '../../context/GraphActionsContext';
 
 export default function TableNode({ id, data }) {
-  const [expanded, setExpanded] = useState(false);
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
+
+  const expanded = Boolean(data.expanded);
 
   const hasColumns = data.columns && data.columns.length > 0;
   const isHighlighted = data.isSearchMatch;
@@ -153,7 +153,7 @@ export default function TableNode({ id, data }) {
             <div
               onClick={(e) => {
                 e.stopPropagation();
-                setExpanded(!expanded);
+                graphActions?.onNodeExpandedToggle?.(id);
               }}
               style={{
                 cursor: 'pointer',

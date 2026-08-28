@@ -1,5 +1,6 @@
 import { theme } from '../theme';
 import { LAYOUT_MODES } from '../utils/dagreLayout';
+import ExportMenu from './ExportMenu';
 
 const btnStyle = (active) => ({
   padding: '6px 10px',
@@ -31,6 +32,13 @@ export default function GraphToolbar({
   studioMode,
   onToggleZen,
   zenMode,
+  onExportPng,
+  onExportSvg,
+  onExportPdf,
+  onExportJson,
+  onExportCsv,
+  onExportOpenLineage,
+  canExport,
 }) {
   return (
     <div
@@ -137,6 +145,16 @@ export default function GraphToolbar({
       )}
 
       <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
+
+      <ExportMenu
+        disabled={!canExport}
+        onExportPng={onExportPng}
+        onExportSvg={onExportSvg}
+        onExportPdf={onExportPdf}
+        onExportJson={onExportJson}
+        onExportCsv={onExportCsv}
+        onExportOpenLineage={onExportOpenLineage}
+      />
 
       <button
         style={{ ...btnStyle(false), marginLeft: 'auto' }}

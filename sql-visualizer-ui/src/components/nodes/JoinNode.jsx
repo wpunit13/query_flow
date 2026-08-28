@@ -1,12 +1,14 @@
-import { useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { theme } from '../../theme';
 import { EyeIcon, EyeOffIcon } from '../../icons';
 import { toggleNodeCollapse } from '../../utils/graphVisibility';
+import { useGraphActions } from '../../context/GraphActionsContext';
 
 export default function JoinNode({ id, data }) {
-  const [expanded, setExpanded] = useState(false);
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
+  const graphActions = useGraphActions();
+
+  const expanded = Boolean(data.expanded);
 
   const hasConditions = data.conditions && data.conditions.length > 0;
   const isHighlighted = data.isSearchMatch;
@@ -54,7 +56,7 @@ export default function JoinNode({ id, data }) {
           }}
           onClick={(e) => {
             e.stopPropagation();
-            if (hasConditions) setExpanded(!expanded);
+            if (hasConditions) graphActions?.onNodeExpandedToggle?.(id);
           }}
         >
           <svg

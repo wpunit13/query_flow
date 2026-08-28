@@ -6,6 +6,14 @@ Built for data engineers and analysts who need to debug long, production-grade q
 
 ![Tech stack: React Flow + FastAPI + SQLGlot](https://img.shields.io/badge/React-18-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-API-green) ![SQLGlot](https://img.shields.io/badge/SQLGlot-parser-orange)
 
+## Demo
+
+![Render SQL and explore the lineage graph](docs/assets/demo-overview.gif)
+
+![Expand a node and trace column lineage](docs/assets/demo-column-trace.gif)
+
+To re-record: [docs/assets/README.md](docs/assets/README.md) — `cd scripts && npm run record` (backend + UI must be running).
+
 ---
 
 ## Features
@@ -133,11 +141,24 @@ This section explains how the UI behaves in practice — especially features tha
 | Area | What it controls |
 |------|------------------|
 | **Header** (top) | SQL editor, **Render DAG**, **Reset**, and **search** |
-| **Graph toolbar** (above canvas) | Layout, **Filter branch**, focus, diff mode |
+| **Graph toolbar** (above canvas) | Layout, **Filter branch**, focus, diff mode, **Export** |
 | **Canvas** | Interactive graph — pan, zoom, click nodes |
 | **Breadcrumb** (below toolbar) | Path to the selected node; shows `column: …` when tracing a column |
 
 After **Render DAG**, the graph is laid out automatically. Node positions stay stable when you hide branches or filter — the graph does not jump unless you change layout mode or render again.
+
+### Export
+
+After rendering, use **Export ▾** in the graph toolbar:
+
+| Format | Use case |
+|--------|----------|
+| PNG / SVG / PDF | Share or print the current graph view |
+| JSON | Full versioned lineage contract + SQL metadata |
+| CSV | Flattened nodes and edges for spreadsheets |
+| OpenLineage | Marquez-compatible lineage event JSON |
+
+API equivalents for CI/CD: `POST /api/v1/lineage`, `/api/v1/export/json`, `/api/v1/export/csv`, `/api/v1/export/openlineage`. Embed docs: [docs/EMBED.md](docs/EMBED.md).
 
 ### Dialect selector
 
