@@ -49,6 +49,8 @@ def test_notworking_sql_file():
     assert len(result["nodes"]) >= 10
     assert len(result["edges"]) >= 10
     assert result["version"] == "1.0"
+    assert "stats" in result
+    assert result["stats"]["node_count"] == len(result["nodes"])
     assert any("LATERAL" in w for w in result["warnings"])
 
 

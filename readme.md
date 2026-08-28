@@ -365,7 +365,7 @@ Try `backend/tests/fixtures/notworking.sql` for a stress test (recursive CTEs, l
 |-------|----------------|
 | **Frontend** | React 18, Vite, [@xyflow/react](https://reactflow.dev/), [dagre](https://github.com/dagrejs/dagre) |
 | **Backend** | Python 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [SQLGlot](https://github.com/tobymao/sqlglot), Pydantic |
-| **API** | REST `POST /api/parse-sql` — versioned JSON with nodes, edges, warnings, and column lineage |
+| **API** | REST v1 under `/api/v1/*` — versioned JSON with nodes, edges, warnings, stats, and column lineage (`GET /api/v1/version` for contract metadata) |
 
 ### Project structure
 

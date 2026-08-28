@@ -1,3 +1,5 @@
+import time
+
 import sqlglot
 from typing import Any, Dict, List, Optional, Set, Tuple
 from sqlglot import lineage as sqlglot_lineage
@@ -18,7 +20,16 @@ from sqlglot.expressions import (
 from backend.services.sql_preprocessor import preprocess_sql
 
 NODE_KINDS = frozenset(
-    {"physical_table", "cte", "subquery", "view", "final_output", "merge_target", "insert_target"}
+    {
+        "physical_table",
+        "cte",
+        "subquery",
+        "view",
+        "join",
+        "final_output",
+        "merge_target",
+        "insert_target",
+    }
 )
 
 
@@ -460,4 +471,12 @@ def build_lineage_graph(sql: str, dialect: str = "bigquery") -> dict:
 
 def parse_sql_to_lineage(sql: str, dialect: str = "bigquery") -> dict:
     """Parse SQL into lineage graph; raises sqlglot.errors.ParseError on failure."""
-    return build_lineage_graph(sql, dialect)
+    start = time.perf_counter()
+    result = build_lineage_graph(sql, dialect)
+    parse_ms = max(0, int((time.perf_counter() - start) * 1000))
+    result["stats"] = {
+        "node_count": len(result["nodes"]),
+        "edge_count": len(result["edges"]),
+        "parse_ms": parse_ms,
+    }
+    return result

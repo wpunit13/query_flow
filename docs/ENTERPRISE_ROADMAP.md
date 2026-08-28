@@ -217,15 +217,15 @@ frontend/
 
 ### Tasks
 
-- [ ] Define versioned API schema (`version` field in responses)
-- [ ] Add `warnings` array to parse responses
-- [ ] Add `kind` / node type enum to node schema
-- [ ] Add `qualified_name` to nodes
-- [ ] Add optional `metadata` object on nodes
-- [ ] Add `edge_type` to edges (join, direct, cte, etc.)
-- [ ] Add `stats` block (node_count, edge_count, parse_ms)
-- [ ] Document API in OpenAPI / Swagger (FastAPI auto-docs)
-- [ ] API versioning strategy (`/v1/lineage`, deprecation policy)
+- [x] Define versioned API schema (`version` field in responses)
+- [x] Add `warnings` array to parse responses
+- [x] Add `kind` / node type enum to node schema
+- [x] Add `qualified_name` to nodes
+- [x] Add optional `metadata` object on nodes
+- [x] Add `edge_type` to edges (join, direct, cte, etc.)
+- [x] Add `stats` block (node_count, edge_count, parse_ms)
+- [x] Document API in OpenAPI / Swagger (FastAPI auto-docs)
+- [x] API versioning strategy (`/api/v1/*`, deprecation policy on legacy `/api/*`)
 
 ---
 
