@@ -13,9 +13,12 @@ export function useKeyboardShortcuts({
   onToggleDiff,
   onToggleStudioMode,
   onToggleZen,
+  onViewGraph,
+  onViewTable,
   enabled = true,
   zenMode = false,
   studioMode = 'author',
+  canSwitchView = false,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -69,6 +72,18 @@ export function useKeyboardShortcuts({
             onToggleStudioMode?.();
           }
           break;
+        case 'g':
+          if (!isInput && canSwitchView) {
+            e.preventDefault();
+            onViewGraph?.();
+          }
+          break;
+        case 't':
+          if (!isInput && canSwitchView) {
+            e.preventDefault();
+            onViewTable?.();
+          }
+          break;
         case 'z':
           if (!isInput && studioMode === 'explore') {
             e.preventDefault();
@@ -110,5 +125,8 @@ export function useKeyboardShortcuts({
     onToggleDiff,
     onToggleStudioMode,
     onToggleZen,
+    onViewGraph,
+    onViewTable,
+    canSwitchView,
   ]);
 }

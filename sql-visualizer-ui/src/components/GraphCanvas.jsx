@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -7,8 +6,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { theme, minimapNodeColor, minimapNodeStrokeColor } from '../theme';
-import TableNode from './nodes/TableNode';
-import JoinNode from './nodes/JoinNode';
+import { flowNodeTypes } from './nodes/flowNodeTypes';
 
 export default function GraphCanvas({
   nodes,
@@ -20,17 +18,12 @@ export default function GraphCanvas({
   onPaneClick,
   showMinimap = true,
 }) {
-  const nodeTypes = useMemo(
-    () => ({ tableNode: TableNode, joinNode: JoinNode }),
-    []
-  );
-
   return (
     <div style={{ flexGrow: 1, overflow: 'hidden' }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes}
+        nodeTypes={flowNodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onInit={onInit}

@@ -7,6 +7,15 @@ export const LAYOUT_MODES = {
 };
 
 const TABLE_WIDTH = 240;
+const TABLE_MIN_WIDTH = 240;
+/** Cap header width — longer names truncate with ellipsis + hover tooltip. */
+export const TABLE_MAX_WIDTH = 480;
+const CHAR_WIDTH_ESTIMATE = 7.5;
+const TABLE_ICON_WIDTH = 22;
+const KIND_BADGE_WIDTH = 44;
+const COL_COUNT_WIDTH = 56;
+const HEADER_ACTIONS_WIDTH = 56;
+const HEADER_PADDING = 28;
 const JOIN_WIDTH_COLLAPSED = 180;
 const JOIN_WIDTH_EXPANDED = 220;
 const HEADER_HEIGHT = 48;
@@ -17,6 +26,9 @@ const JOIN_CONDITION_ROW = 36;
 const COLUMN_ROW_HEIGHT = 28;
 const COLUMN_ROW_WITH_SOURCES = 44;
 const COLUMN_LIST_PADDING = 8;
+const MIN_NODESEP = 100;
+const MIN_RANKSEP = 120;
+const OVERLAP_GAP = 36;
 
 function horizontalOverlap(ax, aw, bx, bw) {
   return ax < bx + bw && ax + aw > bx;
@@ -29,89 +41,205 @@ function columnRowHeight(node, col) {
   return sources > 0 ? COLUMN_ROW_WITH_SOURCES : COLUMN_ROW_HEIGHT;
 }
 
+/** Header row can grow past minWidth when labels are long — layout must match rendered width. */
+function estimateTableWidth(node) {
+  const label = String(node.data?.label || '');
+  const hasKind = Boolean(node.data?.kind);
+  const colCount = node.data?.columns?.length || 0;
+  const showColCount = colCount > 0 && !node.data?.expanded;
+
+  let width =
+    HEADER_PADDING +
+    TABLE_ICON_WIDTH +
+    label.length * CHAR_WIDTH_ESTIMATE +
+    HEADER_ACTIONS_WIDTH;
+  if (hasKind) width += KIND_BADGE_WIDTH;
+  if (showColCount) width += COL_COUNT_WIDTH;
+
+  return Math.min(
+    TABLE_MAX_WIDTH,
+    Math.max(TABLE_MIN_WIDTH, Math.ceil(width))
+  );
+}
+
 /** Estimated node size for dagre layout and expand/collapse shifts. */
 export const getNodeDimensions = (node) => {
-  if (node.type === 'joinNode') {
+  if (node.type === 'joinNode' || node.type === 'unionNode') {
     const conditions = node.data?.conditions?.length || 0;
-    if (!node.data?.expanded || conditions === 0) {
+    const branches = node.data?.branches?.length || 0;
+    const expandable = conditions > 0 || branches > 0;
+    if (!node.data?.expanded || !expandable) {
       return { width: JOIN_WIDTH_COLLAPSED, height: JOIN_HEADER_HEIGHT };
     }
+    const rows = node.type === 'unionNode' ? branches : conditions;
     return {
       width: JOIN_WIDTH_EXPANDED,
-      height: JOIN_HEADER_HEIGHT + conditions * JOIN_CONDITION_ROW,
+      height: JOIN_HEADER_HEIGHT + rows * JOIN_CONDITION_ROW,
     };
   }
 
   const colCount = node.data?.columns?.length || 0;
   if (!colCount) {
-    return { width: TABLE_WIDTH, height: EMPTY_TABLE_HEIGHT };
+    return { width: estimateTableWidth(node), height: EMPTY_TABLE_HEIGHT };
   }
 
   if (!node.data?.expanded) {
-    return { width: TABLE_WIDTH, height: COLLAPSED_TABLE_HEIGHT };
+    return { width: estimateTableWidth(node), height: COLLAPSED_TABLE_HEIGHT };
   }
 
   const columns = node.data.columns || [];
   const rowsHeight = columns.reduce((sum, col) => sum + columnRowHeight(node, col), 0);
   return {
-    width: TABLE_WIDTH,
+    width: estimateTableWidth(node),
     height: HEADER_HEIGHT + COLUMN_LIST_PADDING + rowsHeight,
   };
 };
 
-function getShiftIds(nodes, edges, nodeId, layoutMode, expanded) {
-  const node = nodes.find((n) => n.id === nodeId);
-  if (!node) return new Set();
+/** Spacing scales with largest node so expanded CTEs don't overlap siblings or adjacent ranks. */
+function computeGraphSpacing(nodes) {
+  const visible = nodes.filter((n) => !n.hidden);
+  const maxHeight = visible.reduce(
+    (max, n) => Math.max(max, getNodeDimensions(n).height),
+    COLLAPSED_TABLE_HEIGHT
+  );
+  const maxWidth = visible.reduce(
+    (max, n) => Math.max(max, getNodeDimensions(n).width),
+    TABLE_WIDTH
+  );
+  return {
+    nodesep: Math.max(MIN_NODESEP, Math.ceil(maxWidth * 0.35)),
+    ranksep: Math.max(MIN_RANKSEP, Math.ceil(maxHeight * 0.65)),
+  };
+}
 
-  const toggledExpanded = { ...node, data: { ...node.data, expanded } };
-  const collapsedDims = getNodeDimensions({
-    ...node,
-    data: { ...node.data, expanded: !expanded },
-  });
-  const expandedDims = getNodeDimensions(toggledExpanded);
-  const delta = expandedDims.height - collapsedDims.height;
-  if (delta === 0) return new Set();
+function boxesOverlap(aPos, aDims, bPos, bDims) {
+  return (
+    horizontalOverlap(aPos.x, aDims.width, bPos.x, bDims.width) &&
+    aPos.y < bPos.y + bDims.height &&
+    aPos.y + aDims.height > bPos.y
+  );
+}
 
-  const downstream = getDownstreamNodes(nodeId, edges);
-  downstream.delete(nodeId);
+/** Nudge overlapping nodes apart after dagre (handles tall expanded nodes). */
+function resolveNodeOverlaps(nodes, layoutMode, rankByNodeId = new Map()) {
+  const visible = nodes.filter((n) => !n.hidden);
+  if (visible.length < 2) return nodes;
 
-  const shiftIds = new Set(downstream);
-  const oldEdge =
-    layoutMode === LAYOUT_MODES.LR
-      ? node.position.x + collapsedDims.width
-      : node.position.y + collapsedDims.height;
-  const newFarEdge =
-    layoutMode === LAYOUT_MODES.LR
-      ? node.position.x + expandedDims.width
-      : node.position.y + expandedDims.height;
+  const isLR = layoutMode === LAYOUT_MODES.LR;
+  const positions = new Map(
+    nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }])
+  );
+
+  const sameRank = (aId, bId) => {
+    const aRank = rankByNodeId.get(aId);
+    const bRank = rankByNodeId.get(bId);
+    return aRank != null && bRank != null && aRank === bRank;
+  };
+
+  for (let pass = 0; pass < 8; pass += 1) {
+    let moved = false;
+    const sorted = [...visible].sort((a, b) => {
+      const pa = positions.get(a.id);
+      const pb = positions.get(b.id);
+      return isLR ? pa.y - pb.y || pa.x - pb.x : pa.x - pb.x || pa.y - pb.y;
+    });
+
+    for (let i = 0; i < sorted.length; i += 1) {
+      for (let j = i + 1; j < sorted.length; j += 1) {
+        const a = sorted[i];
+        const b = sorted[j];
+        const aPos = positions.get(a.id);
+        const bPos = positions.get(b.id);
+        const aDims = getNodeDimensions(a);
+        const bDims = getNodeDimensions(b);
+        if (!boxesOverlap(aPos, aDims, bPos, bDims)) continue;
+
+        if (isLR) {
+          if (sameRank(a.id, b.id)) {
+            positions.set(b.id, {
+              x: bPos.x,
+              y: aPos.y + aDims.height + OVERLAP_GAP,
+            });
+          } else {
+            positions.set(b.id, {
+              x: aPos.x + aDims.width + OVERLAP_GAP,
+              y: bPos.y,
+            });
+          }
+        } else if (sameRank(a.id, b.id)) {
+          positions.set(b.id, {
+            x: aPos.x + aDims.width + OVERLAP_GAP,
+            y: bPos.y,
+          });
+        } else {
+          positions.set(b.id, {
+            x: bPos.x,
+            y: aPos.y + aDims.height + OVERLAP_GAP,
+          });
+        }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  return nodes.map((n) => ({
+    ...n,
+    position: positions.get(n.id) ?? n.position,
+  }));
+}
+
+/** Ensure siblings in the same dagre rank don't overlap (TB = horizontal, LR = vertical). */
+function tightenRankSpacing(nodes, layoutMode, rankByNodeId) {
+  const isLR = layoutMode === LAYOUT_MODES.LR;
+  const byRank = new Map();
 
   nodes.forEach((n) => {
-    if (n.id === nodeId || shiftIds.has(n.id)) return;
-    const { width, height } = getNodeDimensions(n);
-    if (layoutMode === LAYOUT_MODES.LR) {
-      const overlapsVert =
-        n.position.y < node.position.y + expandedDims.height &&
-        n.position.y + height > node.position.y;
-      const overlapsHoriz =
-        n.position.x < newFarEdge && n.position.x + width > oldEdge - 1;
-      if (overlapsVert && overlapsHoriz) shiftIds.add(n.id);
-    } else {
-      const overlapsHoriz = horizontalOverlap(
-        node.position.x,
-        expandedDims.width,
-        n.position.x,
-        width
-      );
-      const overlapsVert =
-        n.position.y < newFarEdge && n.position.y + height > oldEdge - 1;
-      if (overlapsHoriz && overlapsVert) shiftIds.add(n.id);
+    if (n.hidden) return;
+    const rank = rankByNodeId.get(n.id);
+    if (rank == null) return;
+    if (!byRank.has(rank)) byRank.set(rank, []);
+    byRank.get(rank).push(n);
+  });
+
+  const positions = new Map(
+    nodes.map((n) => [n.id, { x: n.position.x, y: n.position.y }])
+  );
+
+  byRank.forEach((rankNodes) => {
+    const sorted = [...rankNodes].sort((a, b) => {
+      const pa = positions.get(a.id);
+      const pb = positions.get(b.id);
+      return isLR ? pa.y - pb.y : pa.x - pb.x;
+    });
+
+    for (let i = 1; i < sorted.length; i += 1) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const prevPos = positions.get(prev.id);
+      const currPos = positions.get(curr.id);
+      const prevDims = getNodeDimensions(prev);
+      const minStart = isLR
+        ? prevPos.y + prevDims.height + OVERLAP_GAP
+        : prevPos.x + prevDims.width + OVERLAP_GAP;
+
+      if (isLR) {
+        if (currPos.y < minStart) {
+          positions.set(curr.id, { x: currPos.x, y: minStart });
+        }
+      } else if (currPos.x < minStart) {
+        positions.set(curr.id, { x: minStart, y: currPos.y });
+      }
     }
   });
 
-  return shiftIds;
+  return nodes.map((n) => ({
+    ...n,
+    position: positions.get(n.id) ?? n.position,
+  }));
 }
 
-/** Shift nodes to make room when a node expands or collapses (TB/LR). Radial falls back to relayout. */
+/** Relayout after expand/collapse so spacing matches current node sizes. */
 export function adjustLayoutForExpandedToggle(nodes, edges, nodeId, layoutMode) {
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) return nodes;
@@ -121,50 +249,7 @@ export function adjustLayoutForExpandedToggle(nodes, edges, nodeId, layoutMode) 
     n.id === nodeId ? { ...n, data: { ...n.data, expanded } } : n
   );
 
-  if (layoutMode === LAYOUT_MODES.RADIAL) {
-    return getLayoutedElements(toggledNodes, edges, layoutMode).nodes;
-  }
-
-  const collapsedDims = getNodeDimensions({
-    ...node,
-    data: { ...node.data, expanded: !expanded },
-  });
-  const expandedDims = getNodeDimensions({
-    ...node,
-    data: { ...node.data, expanded },
-  });
-  const delta =
-    layoutMode === LAYOUT_MODES.LR
-      ? expandedDims.width - collapsedDims.width
-      : expandedDims.height - collapsedDims.height;
-
-  if (delta === 0) return toggledNodes;
-
-  const shiftIds = getShiftIds(nodes, edges, nodeId, layoutMode, expanded);
-
-  return toggledNodes.map((n) => {
-    if (!shiftIds.has(n.id)) return n;
-    if (layoutMode === LAYOUT_MODES.LR) {
-      return { ...n, position: { ...n.position, x: n.position.x + delta } };
-    }
-    return { ...n, position: { ...n.position, y: n.position.y + delta } };
-  });
-}
-
-function getDownstreamNodes(nodeId, edges) {
-  const nodes = new Set([nodeId]);
-  const queue = [nodeId];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    edges.forEach((e) => {
-      if (e.hidden) return;
-      if (e.source === current && !nodes.has(e.target)) {
-        nodes.add(e.target);
-        queue.push(e.target);
-      }
-    });
-  }
-  return nodes;
+  return getLayoutedElements(toggledNodes, edges, layoutMode).nodes;
 }
 
 export const ensureNodePositions = (nodes) =>
@@ -238,7 +323,9 @@ function layoutRadial(nodes, edges) {
     const group = byLevel[level] || [node];
     const index = group.findIndex((n) => n.id === node.id);
     const count = group.length;
-    const radius = 100 + level * 160;
+    const spacing = computeGraphSpacing(visibleNodes);
+    const ringStep = Math.max(180, spacing.ranksep + spacing.nodesep);
+    const radius = 100 + level * ringStep;
     const angle = (2 * Math.PI * index) / Math.max(count, 1) - Math.PI / 2;
     const { width, height } = getNodeDimensions(node);
     return {
@@ -250,7 +337,10 @@ function layoutRadial(nodes, edges) {
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return {
+    nodes: resolveNodeOverlaps(layoutedNodes, LAYOUT_MODES.RADIAL),
+    edges,
+  };
 }
 
 export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) => {
@@ -258,10 +348,18 @@ export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) 
     return layoutRadial(nodes, edges);
   }
 
+  const spacing = computeGraphSpacing(nodes);
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   const rankdir = layoutMode === LAYOUT_MODES.LR ? 'LR' : 'TB';
-  dagreGraph.setGraph({ rankdir, nodesep: 80, ranksep: 100 });
+  dagreGraph.setGraph({
+    rankdir,
+    nodesep: spacing.nodesep,
+    ranksep: spacing.ranksep,
+    marginx: 48,
+    marginy: 48,
+    ranker: 'network-simplex',
+  });
 
   nodes.forEach((node) => {
     if (!node.hidden) {
@@ -276,7 +374,18 @@ export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) 
 
   dagre.layout(dagreGraph);
 
-  const layoutedNodes = nodes.map((node) => {
+  const rankByNodeId = new Map();
+  nodes.forEach((node) => {
+    if (node.hidden) return;
+    const pos = dagreGraph.node(node.id);
+    if (!pos) return;
+    rankByNodeId.set(
+      node.id,
+      Math.round(layoutMode === LAYOUT_MODES.LR ? pos.x : pos.y)
+    );
+  });
+
+  let layoutedNodes = nodes.map((node) => {
     if (node.hidden) {
       return {
         ...node,
@@ -299,6 +408,9 @@ export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) 
       },
     };
   });
+
+  layoutedNodes = tightenRankSpacing(layoutedNodes, layoutMode, rankByNodeId);
+  layoutedNodes = resolveNodeOverlaps(layoutedNodes, layoutMode, rankByNodeId);
 
   return { nodes: layoutedNodes, edges };
 };

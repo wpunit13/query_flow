@@ -26,6 +26,7 @@ NODE_KINDS = frozenset(
         "subquery",
         "view",
         "join",
+        "union",
         "final_output",
         "merge_target",
         "insert_target",
@@ -50,6 +51,32 @@ def extract_output_columns(select_expression) -> List[str]:
     return cols
 
 
+def table_alias(table: Table) -> Optional[str]:
+    alias = table.alias
+    if alias is None:
+        return None
+    return str(alias)
+
+
+def operand_display_label(
+    node: Optional[dict], node_id: str, table_expr: Optional[Any] = None
+) -> str:
+    """Build UI label with SQL alias when present (e.g. p (projects))."""
+    alias: Optional[str] = None
+    if isinstance(table_expr, Table):
+        alias = table_alias(table_expr)
+    if node:
+        alias = alias or node.get("data", {}).get("alias")
+    base = (node.get("data", {}).get("label") if node else None) or node_id
+    if node and node.get("type") == "joinNode":
+        ops = node.get("data", {}).get("join_operands") or []
+        if len(ops) >= 2:
+            return f"{ops[0]['label']} × {ops[1]['label']}"
+    if alias and alias.lower() != base.lower() and alias.lower() != node_id.lower():
+        return f"{alias} ({base})"
+    return base
+
+
 def qualify_table(table: Table) -> Dict[str, Optional[str]]:
     """Extract catalog/database/schema/table parts from a Table expression."""
     catalog = table.catalog or None
@@ -63,6 +90,12 @@ def qualify_table(table: Table) -> Dict[str, Optional[str]]:
         "name": name,
         "qualified_name": qualified_name,
     }
+
+
+def format_union_type(union_expr: Union) -> str:
+    if union_expr.args.get("distinct"):
+        return "UNION"
+    return "UNION ALL"
 
 
 def format_join_type(join_expr: Join) -> str:
@@ -155,6 +188,13 @@ class LineageGraphBuilder:
         self.edges: List[dict] = []
         self.cte_names: Set[str] = set()
         self._subquery_counter = 0
+        self._union_counter: Dict[str, int] = {}
+
+    def _branch_label(self, node_id: str) -> str:
+        node = self.nodes_dict.get(node_id)
+        if node:
+            return node["data"]["label"] or node_id
+        return node_id
 
     def add_edge(self, source: str, target: str, edge_type: str = "direct") -> None:
         edge_id = f"e-{source}-{target}"
@@ -177,6 +217,12 @@ class LineageGraphBuilder:
         conditions: Optional[List[str]] = None,
         join_type: Optional[str] = None,
         join_order: Optional[int] = None,
+        union_type: Optional[str] = None,
+        union_order: Optional[int] = None,
+        branch_count: Optional[int] = None,
+        branches: Optional[List[Dict[str, Any]]] = None,
+        join_operands: Optional[List[Dict[str, Any]]] = None,
+        alias: Optional[str] = None,
         column_lineage: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         if node_id in self.nodes_dict:
@@ -185,6 +231,10 @@ class LineageGraphBuilder:
                 existing["data"]["columns"] = columns
             if column_lineage and not existing["data"]["column_lineage"]:
                 existing["data"]["column_lineage"] = column_lineage
+            if alias and not existing["data"].get("alias"):
+                existing["data"]["alias"] = alias
+            if join_operands and not existing["data"].get("join_operands"):
+                existing["data"]["join_operands"] = join_operands
             return
 
         self.nodes_dict[node_id] = {
@@ -192,6 +242,7 @@ class LineageGraphBuilder:
             "type": node_type,
             "data": {
                 "label": label,
+                "alias": alias,
                 "columns": columns or [],
                 "conditions": conditions or [],
                 "kind": kind,
@@ -201,6 +252,11 @@ class LineageGraphBuilder:
                 "dialect": self.dialect,
                 "join_type": join_type,
                 "join_order": join_order,
+                "union_type": union_type,
+                "union_order": union_order,
+                "branch_count": branch_count,
+                "branches": branches or [],
+                "join_operands": join_operands or [],
                 "column_lineage": column_lineage or [],
             },
         }
@@ -210,6 +266,7 @@ class LineageGraphBuilder:
         if isinstance(source_expr, Table):
             qual = qualify_table(source_expr)
             name = qual["name"]
+            alias = table_alias(source_expr)
             if name in self.cte_names:
                 self.add_node(
                     name,
@@ -217,6 +274,7 @@ class LineageGraphBuilder:
                     kind="cte",
                     qualified_name=name,
                     columns=None,
+                    alias=alias,
                 )
                 return name
 
@@ -228,6 +286,7 @@ class LineageGraphBuilder:
                 qualified_name=qual["qualified_name"],
                 schema=qual["schema"],
                 database=qual["database"],
+                alias=alias,
             )
             return node_id
 
@@ -236,9 +295,15 @@ class LineageGraphBuilder:
             sub_id = f"subquery_{parent_target_id}_{self._subquery_counter}"
             inner = source_expr.this
             alias = source_expr.alias
-            label = alias or sub_id
+            label = str(alias) if alias else sub_id
             cols = extract_output_columns(inner) if isinstance(inner, (Select, Union)) else []
-            self.add_node(sub_id, label, kind="subquery", columns=cols)
+            self.add_node(
+                sub_id,
+                label,
+                kind="subquery",
+                columns=cols,
+                alias=str(alias) if alias else None,
+            )
             if isinstance(inner, (Select, Union)):
                 self.process_select_expression(inner, sub_id, "subquery")
             return sub_id
@@ -248,23 +313,68 @@ class LineageGraphBuilder:
 
         return f"unknown_{self._subquery_counter}"
 
+    def process_union_expression(
+        self,
+        union_expr: Union,
+        target_id: str,
+        target_kind: str,
+        attach_lineage: bool = True,
+    ) -> None:
+        branches = collect_union_selects(union_expr)
+        union_type = format_union_type(union_expr)
+        union_order = self._union_counter.get(target_id, 0)
+        self._union_counter[target_id] = union_order + 1
+        union_id = f"union_{target_id}_{union_order}"
+
+        branch_tails: List[Tuple[int, str]] = []
+        for branch_index, branch in enumerate(branches):
+            tail = self.process_select_block(branch, target_id, chain_to_target=False)
+            if tail:
+                branch_tails.append((branch_index, tail))
+
+        branch_meta = [
+            {
+                "index": idx,
+                "tail_id": tail_id,
+                "label": self._branch_label(tail_id),
+            }
+            for idx, tail_id in branch_tails
+        ]
+
+        self.add_node(
+            union_id,
+            union_type,
+            node_type="unionNode",
+            kind="union",
+            union_type=union_type,
+            union_order=union_order,
+            branch_count=len(branches),
+            branches=branch_meta,
+        )
+
+        for _, tail_id in branch_tails:
+            self.add_edge(tail_id, union_id, "union")
+        self.add_edge(union_id, target_id, "union")
+
+        if attach_lineage:
+            cols = extract_output_columns(union_expr)
+            lineage = build_column_lineage(cols, self.sql, self.dialect)
+            self.add_node(
+                target_id,
+                self.nodes_dict[target_id]["data"]["label"],
+                kind=target_kind,
+                columns=cols,
+                column_lineage=lineage,
+            )
+
     def process_select_expression(
         self, select_expr, target_id: str, target_kind: str, attach_lineage: bool = True
     ) -> None:
         """Process SELECT or UNION sources into join chains leading to target_id."""
         if isinstance(select_expr, Union):
-            for branch in collect_union_selects(select_expr):
-                self.process_select_block(branch, target_id, chain_to_target=False)
-            if attach_lineage:
-                cols = extract_output_columns(select_expr)
-                lineage = build_column_lineage(cols, self.sql, self.dialect)
-                self.add_node(
-                    target_id,
-                    self.nodes_dict[target_id]["data"]["label"],
-                    kind=target_kind,
-                    columns=cols,
-                    column_lineage=lineage,
-                )
+            self.process_union_expression(
+                select_expr, target_id, target_kind, attach_lineage
+            )
             return
 
         if isinstance(select_expr, Select):
@@ -278,22 +388,25 @@ class LineageGraphBuilder:
 
     def process_select_block(
         self, select_expr: Select, target_id: str, chain_to_target: bool = True
-    ) -> None:
-        """Walk FROM/JOIN chain with per-join nodes; avoid flattening subquery internals."""
+    ) -> Optional[str]:
+        """Walk FROM/JOIN chain; return tail node id for union branch wiring."""
         steps = get_from_join_steps(select_expr)
         if not steps:
-            return
+            return None
 
         prev_node_id: Optional[str] = None
+        first_source_id: Optional[str] = None
 
         for index, (join_expr, source_expr) in enumerate(steps):
             source_id = self.register_source(source_expr, target_id)
+            if first_source_id is None:
+                first_source_id = source_id
 
             if join_expr is None:
                 if len(steps) == 1 and chain_to_target:
                     self.add_edge(source_id, target_id, "direct")
-                else:
-                    prev_node_id = source_id
+                    return target_id
+                prev_node_id = source_id
                 continue
 
             join_order = index
@@ -301,6 +414,17 @@ class LineageGraphBuilder:
             join_type = format_join_type(join_expr)
             condition = join_condition_sql(join_expr, self.dialect)
             conditions = [condition] if condition else []
+
+            left_id = prev_node_id
+            right_id = source_id
+            left_node = self.nodes_dict.get(left_id) if left_id else None
+            right_node = self.nodes_dict.get(right_id)
+            left_label = operand_display_label(left_node, left_id or "")
+            right_label = operand_display_label(right_node, right_id, source_expr)
+            join_operands = [
+                {"side": "left", "id": left_id, "label": left_label},
+                {"side": "right", "id": right_id, "label": right_label},
+            ]
 
             self.add_node(
                 join_id,
@@ -310,6 +434,7 @@ class LineageGraphBuilder:
                 conditions=conditions,
                 join_type=join_type,
                 join_order=join_order,
+                join_operands=join_operands,
             )
 
             if prev_node_id:
@@ -317,8 +442,11 @@ class LineageGraphBuilder:
             self.add_edge(source_id, join_id, "join")
             prev_node_id = join_id
 
-        if chain_to_target and prev_node_id and prev_node_id != target_id:
-            self.add_edge(prev_node_id, target_id, "direct")
+        tail = prev_node_id or first_source_id
+        if chain_to_target and tail and tail != target_id:
+            self.add_edge(tail, target_id, "direct")
+            return target_id
+        return tail
 
     def process_ctes(self, ast) -> None:
         for cte in ast.find_all(CTE):

@@ -8,6 +8,8 @@ export default function ShortcutsModal({ open, onClose }) {
     { keys: 'F', desc: 'Fit graph to view' },
     { keys: 'R', desc: 'Reset canvas' },
     { keys: 'Esc', desc: 'Exit zen, or clear selection / focus' },
+    { keys: 'G', desc: 'Graph view (explore, after render)' },
+    { keys: 'T', desc: 'Table view (explore, after render)' },
     { keys: 'E', desc: 'Toggle Author ↔ Explore (when graph exists)' },
     { keys: 'Z', desc: 'Toggle zen mode (explore mode)' },
     { keys: 'U', desc: 'Focus upstream of selected node' },

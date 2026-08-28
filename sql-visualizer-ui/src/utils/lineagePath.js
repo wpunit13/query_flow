@@ -60,6 +60,128 @@ export function getBreadcrumbPath(nodeId, nodes, edges) {
   });
 }
 
+const STAGE_KINDS = new Set([
+  'cte',
+  'subquery',
+  'final_output',
+  'view',
+  'insert_target',
+  'merge_target',
+]);
+
+const SOURCE_KINDS = new Set(['physical_table', 'view']);
+
+function friendlyStageLabel(node) {
+  if (!node) return '';
+  if (node.id === 'Final_Output' || node.data?.kind === 'final_output') {
+    return 'Final output';
+  }
+  return node.data?.label || node.id;
+}
+
+/**
+ * Human-readable column trace — pipeline stages + source refs, not raw join hops.
+ */
+export function getColumnTraceSummary(nodeId, columnName, nodes, edges) {
+  const node = nodes.find((n) => n.id === nodeId);
+  const entry = node?.data?.column_lineage?.find((c) => c.name === columnName);
+  const sources = entry?.sources || [];
+
+  const { upstreamNodes, sourceNodeIds } = getColumnLineageHighlight(
+    nodeId,
+    columnName,
+    nodes,
+    edges
+  );
+
+  const pipelineStages = nodes
+    .filter(
+      (n) =>
+        upstreamNodes.has(n.id) &&
+        n.type !== 'joinNode' &&
+        n.type !== 'unionNode' &&
+        STAGE_KINDS.has(n.data?.kind) &&
+        n.id !== nodeId
+    )
+    .sort((a, b) => {
+      const aDeps = getUpstreamNodes(a.id, edges);
+      const bDeps = getUpstreamNodes(b.id, edges);
+      if (aDeps.has(b.id)) return 1;
+      if (bDeps.has(a.id)) return -1;
+      return a.id.localeCompare(b.id);
+    })
+    .map((n) => ({
+      id: n.id,
+      label: friendlyStageLabel(n),
+      kind: n.data?.kind,
+    }));
+
+  const sourceTables = nodes
+    .filter((n) => sourceNodeIds.has(n.id) && SOURCE_KINDS.has(n.data?.kind))
+    .map((n) => ({
+      id: n.id,
+      label: n.data?.label || n.id,
+    }));
+
+  const sourceRefs = sources.map((ref) => {
+    const alias = ref.split('.')[0]?.toLowerCase();
+    const col = ref.includes('.') ? ref.split('.').slice(1).join('.') : ref;
+    const matched = nodes.find(
+      (n) =>
+        upstreamNodes.has(n.id) &&
+        (n.data?.label?.toLowerCase() === alias ||
+          n.id.toLowerCase() === alias ||
+          (alias && n.id.toLowerCase().includes(alias)))
+    );
+    return {
+      ref,
+      column: col,
+      tableLabel: matched
+        ? matched.data?.kind === 'physical_table'
+          ? matched.data?.label || matched.id
+          : `${matched.data?.label || matched.id} (${col})`
+        : ref,
+      nodeId: matched?.id,
+    };
+  });
+
+  const unionMerges = nodes
+    .filter((n) => n.type === 'unionNode' && upstreamNodes.has(n.id))
+    .map((n) => ({
+      id: n.id,
+      unionType: n.data?.union_type || n.data?.label,
+      branchCount: n.data?.branch_count || (n.data?.branches || []).length,
+      branches: n.data?.branches || [],
+      stageLabel: n.data?.label || n.id,
+    }));
+
+  return {
+    columnName,
+    outputLabel: friendlyStageLabel(node),
+    outputNodeId: nodeId,
+    pipelineStages,
+    unionMerges,
+    sourceTables,
+    sourceRefs,
+  };
+}
+
+/**
+ * Breadcrumb for node selection — stages only (skip join nodes).
+ */
+export function getStageBreadcrumbPath(nodeId, nodes, edges) {
+  const full = getBreadcrumbPath(nodeId, nodes, edges);
+  return full
+    .filter((item) => {
+      const node = nodes.find((n) => n.id === item.id);
+      return node?.type !== 'joinNode';
+    })
+    .map((item) => {
+      const node = nodes.find((n) => n.id === item.id);
+      return { id: item.id, label: friendlyStageLabel(node) };
+    });
+}
+
 /**
  * Resolve column lineage sources to node ids and highlight upstream path.
  */

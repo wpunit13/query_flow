@@ -7,10 +7,12 @@ import { GraphActionsContext } from './context/GraphActionsContext';
 import StudioHeader from './components/StudioHeader';
 import GraphCanvas from './components/GraphCanvas';
 import GraphToolbar from './components/GraphToolbar';
+import LineageTableView from './components/LineageTableView';
 import BreadcrumbBar from './components/BreadcrumbBar';
 import ShortcutsModal from './components/ShortcutsModal';
 import ZenFloatingControls from './components/ZenFloatingControls';
 import { LAYOUT_MODES } from './utils/dagreLayout';
+import { VIEW_MODES } from './utils/lineageTableModel';
 
 export default function App() {
   const embedOptions = useMemo(() => {
@@ -41,6 +43,9 @@ export default function App() {
     onToggleDiff: () => graph.setShowShortcuts(true),
     onToggleStudioMode: graph.handleToggleStudioMode,
     onToggleZen: graph.handleToggleZen,
+    onViewGraph: () => graph.handleViewModeChange(VIEW_MODES.GRAPH),
+    onViewTable: () => graph.handleViewModeChange(VIEW_MODES.TABLE),
+    canSwitchView: graph.hasRenderedGraph && graph.studioMode === 'explore',
     enabled: !graph.showShortcuts,
     zenMode: graph.zenMode,
     studioMode: graph.studioMode,
@@ -58,6 +63,9 @@ export default function App() {
 
   const isExplore = graph.studioMode === 'explore';
   const shellPadding = graph.embedMode ? '0' : isExplore ? '8px' : '20px';
+
+  const isTableView =
+    graph.viewMode === VIEW_MODES.TABLE && !graph.zenMode && graph.hasRenderedGraph;
 
   return (
     <GraphActionsContext.Provider value={graphActions}>
@@ -122,6 +130,8 @@ export default function App() {
           {!graph.zenMode && (
             <>
               <GraphToolbar
+                viewMode={graph.viewMode}
+                onViewModeChange={graph.handleViewModeChange}
                 layoutMode={graph.layoutMode}
                 onLayoutChange={graph.handleLayoutChange}
                 branchFilter={graph.branchFilter}
@@ -150,19 +160,39 @@ export default function App() {
               <BreadcrumbBar
                 breadcrumb={graph.breadcrumb}
                 selectedColumn={graph.selectedColumn}
+                selectedNodeId={graph.selectedNodeId}
+                nodes={graph.baseNodes}
+                edges={graph.baseEdges}
               />
             </>
           )}
-          <GraphCanvas
-            nodes={graph.nodes}
-            edges={graph.edges}
-            onNodesChange={graph.onNodesChange}
-            onEdgesChange={graph.onEdgesChange}
-            onInit={onFlowInit}
-            onNodeClick={graph.onNodeClick}
-            onPaneClick={graph.onPaneClick}
-            showMinimap={!graph.zenMode}
-          />
+          {isTableView ? (
+            <LineageTableView
+              nodes={graph.baseNodes}
+              edges={graph.baseEdges}
+              selectedNodeId={graph.selectedNodeId}
+              selectedColumn={graph.selectedColumn}
+              expandedStageId={graph.expandedStageId}
+              tableTab={graph.tableTab}
+              onTableTabChange={graph.setTableTab}
+              showAllOperations={graph.showAllOperations}
+              onToggleShowAllOperations={graph.handleToggleShowAllOperations}
+              onNodeSelect={graph.selectNodeById}
+              onColumnSelect={graph.onColumnSelect}
+              onStageExpand={graph.handleStageExpand}
+            />
+          ) : (
+            <GraphCanvas
+              nodes={graph.nodes}
+              edges={graph.edges}
+              onNodesChange={graph.onNodesChange}
+              onEdgesChange={graph.onEdgesChange}
+              onInit={onFlowInit}
+              onNodeClick={graph.onNodeClick}
+              onPaneClick={graph.onPaneClick}
+              showMinimap={!graph.zenMode}
+            />
+          )}
           {graph.zenMode && (
             <ZenFloatingControls
               onFitView={() => graph.fitGraphToView()}

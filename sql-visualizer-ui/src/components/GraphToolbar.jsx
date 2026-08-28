@@ -1,6 +1,8 @@
 import { theme } from '../theme';
 import { LAYOUT_MODES } from '../utils/dagreLayout';
+import { VIEW_MODES } from '../utils/lineageTableModel';
 import ExportMenu from './ExportMenu';
+import ViewModeToggle from './ViewModeToggle';
 
 const btnStyle = (active) => ({
   padding: '6px 10px',
@@ -15,6 +17,8 @@ const btnStyle = (active) => ({
 });
 
 export default function GraphToolbar({
+  viewMode,
+  onViewModeChange,
   layoutMode,
   onLayoutChange,
   branchFilter,
@@ -40,6 +44,8 @@ export default function GraphToolbar({
   onExportOpenLineage,
   canExport,
 }) {
+  const isGraph = viewMode === VIEW_MODES.GRAPH;
+
   return (
     <div
       style={{
@@ -53,73 +59,87 @@ export default function GraphToolbar({
         fontSize: '12px',
       }}
     >
-      <span style={{ color: theme.textMuted, fontWeight: '600' }}>Layout</span>
-      <button
-        style={btnStyle(layoutMode === LAYOUT_MODES.TB)}
-        onClick={() => onLayoutChange(LAYOUT_MODES.TB)}
-        title="Top to bottom (1)"
-      >
-        ↓ TB
-      </button>
-      <button
-        style={btnStyle(layoutMode === LAYOUT_MODES.LR)}
-        onClick={() => onLayoutChange(LAYOUT_MODES.LR)}
-        title="Left to right (2)"
-      >
-        → LR
-      </button>
-      <button
-        style={btnStyle(layoutMode === LAYOUT_MODES.RADIAL)}
-        onClick={() => onLayoutChange(LAYOUT_MODES.RADIAL)}
-        title="Radial (3)"
-      >
-        ◎ Radial
-      </button>
+      <div style={{ flexShrink: 0 }}>
+        <ViewModeToggle
+          viewMode={viewMode}
+          onViewModeChange={onViewModeChange}
+          disabled={!canExport}
+        />
+      </div>
 
-      <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
+      <span style={{ color: theme.border, margin: '0 4px', flexShrink: 0 }}>|</span>
 
-      <input
-        type="text"
-        placeholder="Filter branch…"
-        value={branchFilter}
-        onChange={(e) => onBranchFilterChange(e.target.value)}
-        style={{
-          padding: '6px 10px',
-          border: `1px solid ${filterNoMatches ? '#f87171' : theme.border}`,
-          borderRadius: '6px',
-          fontSize: '12px',
-          width: '140px',
-        }}
-      />
-      {filterNoMatches && (
-        <span style={{ fontSize: '11px', color: '#dc2626' }}>No matches</span>
+      {isGraph && (
+        <>
+          <span style={{ color: theme.textMuted, fontWeight: '600' }}>Layout</span>
+          <button
+            style={btnStyle(layoutMode === LAYOUT_MODES.TB)}
+            onClick={() => onLayoutChange(LAYOUT_MODES.TB)}
+            title="Top to bottom (1)"
+          >
+            ↓ TB
+          </button>
+          <button
+            style={btnStyle(layoutMode === LAYOUT_MODES.LR)}
+            onClick={() => onLayoutChange(LAYOUT_MODES.LR)}
+            title="Left to right (2)"
+          >
+            → LR
+          </button>
+          <button
+            style={btnStyle(layoutMode === LAYOUT_MODES.RADIAL)}
+            onClick={() => onLayoutChange(LAYOUT_MODES.RADIAL)}
+            title="Radial (3)"
+          >
+            ◎ Radial
+          </button>
+
+          <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
+
+          <input
+            type="text"
+            placeholder="Filter branch…"
+            value={branchFilter}
+            onChange={(e) => onBranchFilterChange(e.target.value)}
+            style={{
+              padding: '6px 10px',
+              border: `1px solid ${filterNoMatches ? '#f87171' : theme.border}`,
+              borderRadius: '6px',
+              fontSize: '12px',
+              width: '140px',
+            }}
+          />
+          {filterNoMatches && (
+            <span style={{ fontSize: '11px', color: '#dc2626' }}>No matches</span>
+          )}
+
+          <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
+
+          <button
+            style={btnStyle(focusMode === 'upstream')}
+            onClick={onFocusUpstream}
+            disabled={!selectedNodeId}
+            title="Focus upstream (U)"
+          >
+            ↑ Upstream
+          </button>
+          <button
+            style={btnStyle(focusMode === 'downstream')}
+            onClick={onFocusDownstream}
+            disabled={!selectedNodeId}
+            title="Focus downstream (D)"
+          >
+            ↓ Downstream
+          </button>
+          {focusMode && (
+            <button style={btnStyle(false)} onClick={onClearFocus} title="Clear focus (Esc)">
+              Clear focus
+            </button>
+          )}
+
+          <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
+        </>
       )}
-
-      <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
-
-      <button
-        style={btnStyle(focusMode === 'upstream')}
-        onClick={onFocusUpstream}
-        disabled={!selectedNodeId}
-        title="Focus upstream (U)"
-      >
-        ↑ Upstream
-      </button>
-      <button
-        style={btnStyle(focusMode === 'downstream')}
-        onClick={onFocusDownstream}
-        disabled={!selectedNodeId}
-        title="Focus downstream (D)"
-      >
-        ↓ Downstream
-      </button>
-      {focusMode && (
-        <button style={btnStyle(false)} onClick={onClearFocus} title="Clear focus (Esc)">
-          Clear focus
-        </button>
-      )}
-
-      <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
 
       <button
         style={btnStyle(diffMode)}
@@ -134,7 +154,7 @@ export default function GraphToolbar({
         </span>
       )}
 
-      {studioMode === 'explore' && (
+      {studioMode === 'explore' && isGraph && (
         <button
           style={btnStyle(zenMode)}
           onClick={onToggleZen}

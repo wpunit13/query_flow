@@ -3,8 +3,10 @@ import { theme, kindLabels, kindColors } from '../../theme';
 import { TableIcon, EyeIcon, EyeOffIcon } from '../../icons';
 import { toggleNodeCollapse } from '../../utils/graphVisibility';
 import { useGraphActions } from '../../context/GraphActionsContext';
+import { getNodeDimensions } from '../../utils/dagreLayout';
+import TruncatedText from '../TruncatedText';
 
-export default function TableNode({ id, data }) {
+export default function TableNode({ id, data, type = 'tableNode' }) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
 
@@ -36,13 +38,17 @@ export default function TableNode({ id, data }) {
     });
   }
 
+  const { width: nodeWidth } = getNodeDimensions({ id, data, type });
+
   return (
     <div
       style={{
         background: theme.cardBg,
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
-        minWidth: '240px',
+        width: nodeWidth,
+        minWidth: nodeWidth,
+        boxSizing: 'border-box',
         boxShadow: data.diffStatus === 'added'
           ? '0 0 12px rgba(16, 185, 129, 0.35)'
           : isActiveSearch
@@ -52,6 +58,7 @@ export default function TableNode({ id, data }) {
               : '0 4px 6px -1px rgb(0 0 0 / 0.1)',
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.3s ease',
+        zIndex: expanded ? 8 : 1,
       }}
     >
       <Handle
@@ -79,10 +86,18 @@ export default function TableNode({ id, data }) {
             fontSize: '13px',
             fontWeight: '600',
             color: theme.textMain,
+            minWidth: 0,
+            flex: 1,
+            gap: '0',
           }}
         >
           <TableIcon />
-          {data.label}
+          <TruncatedText
+            text={data.label}
+            subtitle={data.kind ? kindLabel : undefined}
+            subtitleColor={kindColor}
+            style={{ flex: 1, minWidth: 0, marginLeft: '4px' }}
+          />
           {data.kind && (
             <span
               style={{
@@ -93,13 +108,22 @@ export default function TableNode({ id, data }) {
                 padding: '2px 6px',
                 borderRadius: '4px',
                 background: `${kindColor}18`,
+                flexShrink: 0,
               }}
             >
               {kindLabel}
             </span>
           )}
           {data.diffStatus === 'added' && (
-            <span style={{ fontSize: '9px', color: '#10b981', marginLeft: '6px', fontWeight: '700' }}>
+            <span
+              style={{
+                fontSize: '9px',
+                color: '#10b981',
+                marginLeft: '6px',
+                fontWeight: '700',
+                flexShrink: 0,
+              }}
+            >
               NEW
             </span>
           )}
@@ -110,6 +134,7 @@ export default function TableNode({ id, data }) {
                 color: theme.textMuted,
                 marginLeft: '6px',
                 fontWeight: '500',
+                flexShrink: 0,
               }}
             >
               ({data.columns.length} cols)
@@ -193,14 +218,14 @@ export default function TableNode({ id, data }) {
                   background: isSelectedCol || isSearchCol ? '#fef3c7' : 'transparent',
                 }}
               >
-                <span
+                <TruncatedText
+                  text={col}
                   style={{
                     fontWeight: '600',
                     color: isSearchCol ? '#d97706' : theme.textMain,
+                    display: 'block',
                   }}
-                >
-                  {col}
-                </span>
+                />
                 <span style={{ fontSize: '9px', color: theme.primary, marginLeft: '6px' }}>
                   trace
                 </span>

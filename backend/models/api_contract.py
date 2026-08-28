@@ -20,6 +20,7 @@ class NodeKind(str, Enum):
     SUBQUERY = "subquery"
     VIEW = "view"
     JOIN = "join"
+    UNION = "union"
     FINAL_OUTPUT = "final_output"
     MERGE_TARGET = "merge_target"
     INSERT_TARGET = "insert_target"
@@ -28,6 +29,7 @@ class NodeKind(str, Enum):
 class EdgeType(str, Enum):
     DIRECT = "direct"
     JOIN = "join"
+    UNION = "union"
     MERGE = "merge"
     CTE = "cte"
 
