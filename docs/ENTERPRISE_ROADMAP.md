@@ -35,17 +35,31 @@ Current extraction is table-name-level, not true column-level lineage.
 
 ## 5. Metadata Catalog Integration
 
-Enterprises need lineage in context of their data catalog.
+Enterprises need lineage in context of their data catalog. **Parse-only mode stays the default** — catalog is optional enrichment after parse.
+
+**Design:** [CATALOG.md](CATALOG.md) (phases, API, credentials, local mock testing).
+
+### Phase plan
+
+| Phase | Focus | Status |
+|-------|--------|--------|
+| **0** | Enrich API, `CatalogConnector`, mock JSON fixture, no UI | [ ] |
+| **1** | Catalog dropdown (`None` / mock), enriched table nodes, dev demo | [ ] |
+| **2** | First real connector (BQ or Snowflake), server credentials, Settings UI | [ ] |
+| **3** | Unity Catalog, Glue, DataHub read; K8s secrets; cache | [ ] |
+| **4** | Collibra, Atlan, OAuth, “Open in catalog” | [ ] |
+| **5** | Cross-asset impact analysis (catalog lineage APIs) | [ ] |
 
 ### Tasks
 
-- [ ] Integrate with Snowflake metadata / INFORMATION_SCHEMA
-- [ ] Integrate with Databricks Unity Catalog
-- [ ] Integrate with BigQuery catalog
-- [ ] Integrate with AWS Glue Data Catalog
-- [ ] Integrate with Collibra
-- [ ] Integrate with Atlan
-- [ ] Integrate with DataHub
+- [ ] Phase 0: `POST /api/v1/catalog/enrich` + file mock connector
+- [ ] Phase 1: UI catalog dropdown; metadata chips on source tables
+- [ ] Phase 2: Integrate with BigQuery catalog **or** Snowflake INFORMATION_SCHEMA
+- [ ] Phase 3: Integrate with Databricks Unity Catalog
+- [ ] Phase 3: Integrate with AWS Glue Data Catalog
+- [ ] Phase 3–4: Integrate with DataHub (read; complements OpenLineage export)
+- [ ] Phase 4: Integrate with Collibra
+- [ ] Phase 4: Integrate with Atlan
 - [ ] Enrich nodes with owner, description, row count, freshness
 - [ ] Enrich nodes with PII tags and SLA tier
 - [ ] “Open in catalog” link per table node
@@ -346,6 +360,7 @@ docker compose -f deploy/docker-compose.yml up --build
 
 | Date | Item | Notes |
 |---|---|---|
+| 2026-08-28 | Section 5 — Catalog design doc | Phased plan in `docs/CATALOG.md`; optional enrich, mock local testing |
 | 2026-08-28 | Section 8 — Export & embed | PNG/SVG/PDF export, JSON/CSV/OpenLineage API, embed mode, `/api/v1/lineage` |
 | 2026-08-28 | Section 12 — API contract versioning | `/api/v1/*`, `GET /api/v1/version`, `stats` block, NodeKind/EdgeType enums, legacy deprecation headers |
 | 2026-08-28 | Section 6 — Multi-dialect | Dialect selector, detect API, editor highlighting map |

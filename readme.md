@@ -410,6 +410,8 @@ deploy/
   docker-compose.yml          # Local single-container run
 
 docs/
+  CATALOG.md                  # Metadata catalog integration (phased design)
+  EMBED.md                    # iframe / API embed
   ENTERPRISE_ROADMAP.md       # Enterprise / production backlog
 
 main.py                       # FastAPI entrypoint (uvicorn main:app)
@@ -426,7 +428,7 @@ Enterprise and production hardening items are tracked in [ENTERPRISE_ROADMAP.md]
 
 **Completed:** architecture refactor, lineage accuracy (section 4), advanced graph UX (section 9).
 
-**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `docs/ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose -f deploy/docker-compose.yml up --build`.
+**Planned:** catalog integration (phased design in [docs/CATALOG.md](docs/CATALOG.md)), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `docs/ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose -f deploy/docker-compose.yml up --build`.
 
 ---
 
