@@ -23,13 +23,13 @@ export default function UnionNode({
   return (
     <div
       style={{
-        background: theme.cardBg,
+        background: theme.nodeBg,
         border: `2px solid ${isHighlighted ? theme.highlight : theme.unionBg}`,
         borderRadius: expanded ? '8px' : '20px',
         minWidth: expanded ? '200px' : 'auto',
         boxShadow: isHighlighted
           ? `0 0 15px ${theme.highlight}`
-          : theme.shadowSubtle,
+          : theme.shadowCard,
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.2s ease',
         display: 'flex',
@@ -43,7 +43,7 @@ export default function UnionNode({
       <div
         style={{
           padding: '6px 12px',
-          background: theme.cardBg,
+          background: theme.nodeBg,
           color: theme.unionBg,
           fontSize: '11px',
           fontWeight: '700',

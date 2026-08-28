@@ -1,7 +1,8 @@
 /**
  * Record README demo GIFs with Playwright (headless).
  *
- * Captures current UI: Explore mode, TB/LR layouts, Graph/Table toggle, column trace.
+ * Captures current UI: Explore mode, TB/LR layouts, Graph/Table toggle, column trace,
+ * pipeline stage graph (macro boxes), table pipeline tab.
  *
  * Requires:
  *   - Backend: http://127.0.0.1:8000/health
@@ -23,6 +24,10 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dir, '..');
 const ASSETS = resolve(ROOT, 'docs/assets');
 const FIXTURE_SQL = resolve(ROOT, 'backend/tests/fixtures/notworking.sql');
+const PIPELINE_FIXTURE_SQL = resolve(
+  ROOT,
+  'backend/tests/fixtures/large_multifeature.sql'
+);
 const UI_URL = process.env.DEMO_UI_URL || 'http://127.0.0.1:5173';
 const API_HEALTH = process.env.DEMO_API_URL || 'http://127.0.0.1:8000/health';
 
@@ -33,15 +38,27 @@ const FALLBACK_SQL = `WITH cte1 AS (
 )
 SELECT id, amount FROM cte1`;
 
-function loadDemoSql() {
-  if (existsSync(FIXTURE_SQL)) {
-    return readFileSync(FIXTURE_SQL, 'utf8');
+function loadSqlFile(path, label) {
+  if (existsSync(path)) {
+    return readFileSync(path, 'utf8');
   }
-  console.warn(`Fixture not found (${FIXTURE_SQL}), using fallback SQL`);
+  console.warn(`Fixture not found (${path}), ${label}`);
+  return null;
+}
+
+function loadDemoSql() {
+  const sql = loadSqlFile(FIXTURE_SQL, 'using fallback SQL');
+  if (sql) return sql;
   return FALLBACK_SQL;
 }
 
+function loadPipelineDemoSql() {
+  const sql = loadSqlFile(PIPELINE_FIXTURE_SQL, 'falling back to default demo SQL');
+  return sql || DEMO_SQL;
+}
+
 const DEMO_SQL = loadDemoSql();
+const PIPELINE_DEMO_SQL = loadPipelineDemoSql();
 
 mkdirSync(ASSETS, { recursive: true });
 
@@ -95,20 +112,92 @@ function pngBuffersToGif(frameBuffers, outPath, frameDelayMs = 120) {
   return { width, height, frames: frameBuffers.length };
 }
 
-async function fillSqlEditor(page, sql) {
+const LINEAGE_SESSION_KEYS = [
+  'ls_session_sql',
+  'ls_lineage_session_meta',
+  'ls_lineage_session_result',
+];
+
+async function clearStoredLineageSession(page) {
+  await page.evaluate((keys) => {
+    for (const key of keys) {
+      try {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, LINEAGE_SESSION_KEYS);
+}
+
+/** Fresh Author page with SQL editor — avoids Explore restore hiding the editor. */
+async function prepareRecordingPage(page) {
+  await page.goto(UI_URL, { waitUntil: 'networkidle' });
+  await clearStoredLineageSession(page);
+  await sleep(600);
+  await ensureSqlEditorReady(page);
+}
+
+async function ensureSqlEditorReady(page) {
   const editor = page.locator('.cm-editor .cm-content').first();
-  await editor.click({ timeout: 15_000 });
+  try {
+    await editor.waitFor({ state: 'visible', timeout: 3000 });
+    return;
+  } catch {
+    /* Explore mode or session restore — open Author */
+  }
+
+  const editBtn = page.getByRole('button', { name: /^Edit SQL/i });
+  if (await editBtn.count() > 0) {
+    await editBtn.click();
+    await sleep(500);
+  } else {
+    await page.keyboard.press('e');
+    await sleep(500);
+  }
+
+  await editor.waitFor({ state: 'visible', timeout: 20_000 });
+}
+
+async function fillSqlEditor(page, sql) {
+  await ensureSqlEditorReady(page);
+  const editor = page.locator('.cm-editor .cm-content').first();
+  await editor.click({ timeout: 20_000 });
   const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
   await page.keyboard.press(`${mod}+A`);
   await page.keyboard.insertText(sql);
-  await sleep(400);
+  await sleep(sql.length > 4000 ? 1200 : 400);
 }
 
-async function renderDag(page) {
+async function waitForParseComplete(page, timeoutMs) {
+  await page
+    .locator('text=Restoring lineage')
+    .waitFor({ state: 'hidden', timeout: timeoutMs })
+    .catch(() => {});
+
+  await page.waitForFunction(
+    () => {
+      const buttons = Array.from(document.querySelectorAll('button'));
+      const parsing = buttons.some((b) => (b.textContent || '').includes('Parsing'));
+      const graphReady = buttons.some((b) => /^Graph$/i.test((b.textContent || '').trim()));
+      return !parsing && graphReady;
+    },
+    { timeout: timeoutMs }
+  );
+}
+
+async function waitForGraphCanvas(page, timeoutMs = 60_000) {
+  await ensureGraphView(page);
+  await page.waitForSelector('.react-flow__node', { timeout: timeoutMs });
+  await sleep(800);
+}
+
+async function renderDag(page, { timeoutMs = 180_000 } = {}) {
   const renderBtn = page.getByRole('button', { name: /Render DAG/i }).first();
   await renderBtn.click();
-  await page.waitForSelector('.react-flow__node', { timeout: 90_000 });
-  await sleep(800);
+  await waitForParseComplete(page, timeoutMs);
+  await waitForGraphCanvas(page, Math.min(timeoutMs, 120_000));
 }
 
 async function fitGraph(page) {
@@ -119,8 +208,7 @@ async function fitGraph(page) {
 /** Overview: complex SQL → TB graph → LR layout → table pipeline peek → graph selection */
 async function recordOverview(page) {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto(UI_URL, { waitUntil: 'networkidle' });
-  await sleep(600);
+  await prepareRecordingPage(page);
 
   const frames = [];
   frames.push(...await captureFrames(page, 3, 200));
@@ -170,39 +258,69 @@ async function recordOverview(page) {
   console.log(`Wrote ${out} (${meta.width}x${meta.height}, ${meta.frames} frames)`);
 }
 
+/** Switch to flat table/join graph (skip click if already flat). */
+async function ensureFlatGraph(page) {
+  const fullGraphBtn = page.getByRole('button', { name: /^Full graph$/i });
+  if (await fullGraphBtn.count() > 0) {
+    await fullGraphBtn.click();
+    await sleep(900);
+    return true;
+  }
+  const pipelineBtn = page.getByRole('button', { name: /^Pipeline stages$/i });
+  return (await pipelineBtn.count()) === 0;
+}
+
 /** Column trace on output / stage with expandable columns */
 async function recordColumnTrace(page) {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto(UI_URL, { waitUntil: 'networkidle' });
-  await sleep(400);
+  await prepareRecordingPage(page);
 
   await fillSqlEditor(page, DEMO_SQL);
   await renderDag(page);
+  await ensureGraphView(page);
+  await ensureFlatGraph(page);
   await fitGraph(page);
 
   const frames = await captureFrames(page, 4, 200);
 
-  const outputNode = page.locator('.react-flow__node').filter({
-    hasText: /Final|Output|cte1/i,
-  }).first();
-  const targetNode =
-    (await outputNode.count() > 0)
-      ? outputNode
-      : page.locator('.react-flow__node').first();
+  const targetNode = page
+    .locator('.react-flow__node')
+    .filter({ hasText: /Final View Output|Final_Output/i })
+    .filter({ hasText: /\(\d+ cols\)/ })
+    .first();
 
   if (await targetNode.count() > 0) {
+    await targetNode.scrollIntoViewIfNeeded();
     await targetNode.click();
-    await sleep(300);
-    const expandToggle = targetNode.getByText('▼');
-    if (await expandToggle.count() > 0) {
-      await expandToggle.click();
-      frames.push(...await captureFrames(page, 5, 200));
-      const trace = targetNode.getByText('trace', { exact: true }).first();
-      if (await trace.count() > 0) {
-        await trace.click();
+    await sleep(600);
+
+    let trace = targetNode.locator('span').filter({ hasText: /^trace$/i }).first();
+    if ((await trace.count()) === 0) {
+      const expandToggle = targetNode.getByText('▼', { exact: true });
+      if (await expandToggle.count() > 0) {
+        await expandToggle.click();
+        await sleep(500);
+      }
+      trace = targetNode.locator('span').filter({ hasText: /^trace$/i }).first();
+    }
+
+    if (await trace.count() > 0) {
+      await trace.click({ force: true });
+      frames.push(...await captureFrames(page, 10, 250));
+    } else {
+      const colCell = targetNode
+        .locator('div')
+        .filter({ hasText: /department_path/i })
+        .first();
+      if (await colCell.count() > 0) {
+        await colCell.click({ force: true });
         frames.push(...await captureFrames(page, 10, 250));
+      } else {
+        console.warn('demo-column-trace: expanded node but no trace link found');
       }
     }
+  } else {
+    console.warn('demo-column-trace: no Final Output table node with columns found');
   }
 
   if (frames.length > 6) {
@@ -217,8 +335,7 @@ async function recordColumnTrace(page) {
 /** Table view: pipeline stages + stage detail panel */
 async function recordTableView(page) {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto(UI_URL, { waitUntil: 'networkidle' });
-  await sleep(400);
+  await prepareRecordingPage(page);
 
   await fillSqlEditor(page, DEMO_SQL);
   await renderDag(page);
@@ -260,18 +377,99 @@ async function recordTableView(page) {
   }
 }
 
+async function ensureGraphView(page) {
+  const graphBtn = page.getByRole('button', { name: /^Graph$/i });
+  if (await graphBtn.count() > 0) {
+    await graphBtn.click();
+    await sleep(400);
+  }
+}
+
+/** Switch to macro pipeline stage boxes (skip click if already in compound mode). */
+async function ensurePipelineStageGraph(page) {
+  const pipelineBtn = page.getByRole('button', { name: /^Pipeline stages$/i });
+  const fullGraphBtn = page.getByRole('button', { name: /^Full graph$/i });
+
+  if (await pipelineBtn.count() > 0) {
+    await pipelineBtn.click();
+    await sleep(700);
+    return true;
+  }
+  if (await fullGraphBtn.count() > 0) {
+    return true;
+  }
+  return false;
+}
+
+/** Pipeline stage graph: macro stage boxes, expand internals, selection highlight */
+async function recordPipelineStages(page) {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await prepareRecordingPage(page);
+
+  await fillSqlEditor(page, PIPELINE_DEMO_SQL);
+  await renderDag(page, { timeoutMs: 300_000 });
+  await ensureGraphView(page);
+  await fitGraph(page);
+  await sleep(1200);
+
+  const pipelineAvailable = await ensurePipelineStageGraph(page);
+  if (!pipelineAvailable) {
+    console.log(
+      'Skipped demo-pipeline-stages.gif (no Pipeline stages / Full graph toggle — query may be too small or not a CTE pipeline)'
+    );
+    return;
+  }
+
+  await fitGraph(page);
+  const frames = await captureFrames(page, 6, 220);
+
+  const expandBtn = page
+    .locator('.react-flow__node')
+    .getByRole('button', { name: /^Expand$/i })
+    .first();
+  if (await expandBtn.count() > 0) {
+    await expandBtn.click();
+    await sleep(900);
+    await fitGraph(page);
+    frames.push(...await captureFrames(page, 8, 250));
+  }
+
+  const stageNode = page.locator('.react-flow__node').filter({
+    hasText: /CTE|OUTPUT|Final/i,
+  }).first();
+  if (await stageNode.count() > 0) {
+    await stageNode.click();
+    frames.push(...await captureFrames(page, 6, 220));
+  }
+
+  const out = resolve(ASSETS, 'demo-pipeline-stages.gif');
+  const meta = pngBuffersToGif(frames, out, 130);
+  console.log(`Wrote ${out} (${meta.width}x${meta.height}, ${meta.frames} frames)`);
+}
+
 async function main() {
   console.log('Waiting for API and UI…');
   await waitForServices();
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
+  await context.addInitScript((keys) => {
+    for (const key of keys) {
+      try {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, LINEAGE_SESSION_KEYS);
   const page = await context.newPage();
 
   try {
     await recordOverview(page);
     await recordColumnTrace(page);
     await recordTableView(page);
+    await recordPipelineStages(page);
   } finally {
     await context.close();
     await browser.close();

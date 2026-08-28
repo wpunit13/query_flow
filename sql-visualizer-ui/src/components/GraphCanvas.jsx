@@ -38,6 +38,9 @@ export default function GraphCanvas({
         onInit={onInit}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        defaultEdgeOptions={{
+          style: { stroke: theme.edgeStroke, strokeWidth: 2.75 },
+        }}
         minZoom={0.02}
         maxZoom={2}
         fitViewOptions={{ padding: 0.08, minZoom: 0.02, maxZoom: 1 }}

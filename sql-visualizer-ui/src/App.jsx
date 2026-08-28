@@ -60,13 +60,16 @@ export default function App() {
   const graphActions = {
     onColumnSelect: graph.onColumnSelect,
     onNodeExpandedToggle: graph.onNodeExpandedToggle,
+    onCompoundStageToggle: graph.handleCompoundStageToggle,
   };
 
   const isExplore = graph.studioMode === 'explore';
   const shellPadding = graph.embedMode ? '0' : isExplore ? '8px' : '20px';
 
   const isTableView =
-    graph.viewMode === VIEW_MODES.TABLE && !graph.zenMode && graph.hasRenderedGraph;
+    graph.viewMode === VIEW_MODES.TABLE &&
+    !graph.zenMode &&
+    (graph.hasRenderedGraph || graph.loading);
 
   return (
     <GraphActionsContext.Provider value={graphActions}>
@@ -157,6 +160,9 @@ export default function App() {
                 onExportCsv={graph.handleExportCsv}
                 onExportOpenLineage={graph.handleExportOpenLineage}
                 canExport={graph.hasRenderedGraph}
+                compoundGraphEligible={graph.compoundGraphEligible}
+                graphDetailMode={graph.graphDetailMode}
+                onToggleGraphDetail={graph.handleToggleGraphDetail}
               />
               <BreadcrumbBar
                 breadcrumb={graph.breadcrumb}
@@ -168,7 +174,20 @@ export default function App() {
               />
             </>
           )}
-          {isTableView ? (
+          {graph.loading && !graph.hasRenderedGraph ? (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: theme.textMuted,
+                fontSize: 14,
+              }}
+            >
+              Restoring lineage…
+            </div>
+          ) : isTableView ? (
             <LineageTableView
               nodes={graph.baseNodes}
               edges={graph.baseEdges}

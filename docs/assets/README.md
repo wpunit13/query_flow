@@ -1,12 +1,17 @@
 # README demo assets
 
-Animated demos for the main [readme.md](../readme.md). Files here are **screen captures** (GIF or MP4), not live apps.
+Animated demos for the main [readme.md](../readme.md). Files here are **screen captures** (GIF), not live apps.
 
 ## Files
 
-| `demo-overview.gif` | Complex SQL → Render → LR layout → Table peek → graph selection (**commit to git**) |
-| `demo-column-trace.gif` | Expand node → trace a column upstream (**commit to git**) |
-| `demo-table-view.gif` | Table view → Pipeline tab → stage detail (**commit to git**, shown in main README) |
+| File | What it shows | SQL fixture (`scripts/record-demo.mjs`) |
+|------|----------------|----------------------------------------|
+| `demo-overview.gif` | Parse → TB/LR layout → Table/Pipeline peek → graph node selection | `notworking.sql` |
+| `demo-column-trace.gif` | Expand node → **trace** column → upstream highlight on graph | `notworking.sql` |
+| `demo-table-view.gif` | **Table** view → **Pipeline** tab → stage row → detail panel | `notworking.sql` |
+| `demo-pipeline-stages.gif` | Graph **Pipeline stages** → expand stage → path highlight | `large_multifeature.sql` |
+
+All four GIFs are produced by a single run: `cd scripts && npm run record`.
 
 Scratch video from Playwright (`*.webm`, `page@*`) is deleted automatically after each run.
 
@@ -35,6 +40,8 @@ npm run record
 
 Output is written to this folder (`docs/assets/`).
 
+Each GIF segment clears stored lineage session keys and opens **Edit SQL** if needed (after the first recording, Explore mode hides the editor).
+
 ## Record manually
 
 1. Record with **Kap**, **CleanShot**, or **QuickTime** (1280×720, 10–20 s).
@@ -49,8 +56,4 @@ ffmpeg -i recording.mov -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s
 
 ## README embed
 
-```markdown
-![Demo — overview](docs/assets/demo-overview.gif)
-![Demo — column trace](docs/assets/demo-column-trace.gif)
-![Demo — table view](docs/assets/demo-table-view.gif)
-```
+See section **Demo** in [readme.md](../readme.md) for captions paired with each GIF.

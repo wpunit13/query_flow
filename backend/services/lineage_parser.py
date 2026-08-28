@@ -71,7 +71,8 @@ def operand_display_label(
     if node and node.get("type") == "joinNode":
         ops = node.get("data", {}).get("join_operands") or []
         if len(ops) >= 2:
-            return f"{ops[0]['label']} × {ops[1]['label']}"
+            join_type = node.get("data", {}).get("join_type") or node.get("data", {}).get("label") or "JOIN"
+            return f"{join_type}: {ops[0]['label']} + {ops[1]['label']}"
     if alias and alias.lower() != base.lower() and alias.lower() != node_id.lower():
         return f"{alias} ({base})"
     return base
@@ -396,6 +397,7 @@ class LineageGraphBuilder:
 
         prev_node_id: Optional[str] = None
         first_source_id: Optional[str] = None
+        prev_source_expr: Optional[Any] = None
 
         for index, (join_expr, source_expr) in enumerate(steps):
             source_id = self.register_source(source_expr, target_id)
@@ -407,6 +409,7 @@ class LineageGraphBuilder:
                     self.add_edge(source_id, target_id, "direct")
                     return target_id
                 prev_node_id = source_id
+                prev_source_expr = source_expr
                 continue
 
             join_order = index
@@ -419,7 +422,12 @@ class LineageGraphBuilder:
             right_id = source_id
             left_node = self.nodes_dict.get(left_id) if left_id else None
             right_node = self.nodes_dict.get(right_id)
-            left_label = operand_display_label(left_node, left_id or "")
+            left_expr = (
+                prev_source_expr
+                if left_node and left_node.get("type") != "joinNode"
+                else None
+            )
+            left_label = operand_display_label(left_node, left_id or "", left_expr)
             right_label = operand_display_label(right_node, right_id, source_expr)
             join_operands = [
                 {"side": "left", "id": left_id, "label": left_label},
@@ -441,6 +449,7 @@ class LineageGraphBuilder:
                 self.add_edge(prev_node_id, join_id, "join")
             self.add_edge(source_id, join_id, "join")
             prev_node_id = join_id
+            prev_source_expr = source_expr
 
         tail = prev_node_id or first_source_id
         if chain_to_target and tail and tail != target_id:

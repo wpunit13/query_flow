@@ -35,7 +35,7 @@ export default function TableNode({
         ? theme.highlight
         : isColumnSource
           ? theme.joinBg
-          : theme.border;
+        : theme.nodeBorder;
 
   const lineageByColumn = {};
   if (data.column_lineage) {
@@ -45,11 +45,18 @@ export default function TableNode({
   }
 
   const { width: nodeWidth } = getNodeDimensions({ id, data, type });
+  const alias = data?.alias;
+  const baseName = data?.label || id;
+  const showAliasHeader =
+    alias &&
+    alias.toLowerCase() !== String(baseName).toLowerCase() &&
+    alias.toLowerCase() !== String(id).toLowerCase();
+  const showAliasLine = Boolean(alias && (showAliasHeader || data?.kind === 'subquery'));
 
   return (
     <div
       style={{
-        background: theme.cardBg,
+        background: theme.nodeBg,
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
         width: nodeWidth,
@@ -70,13 +77,13 @@ export default function TableNode({
       <Handle
         type="target"
         position={targetPosition}
-        style={{ background: theme.border, width: '8px', height: '8px' }}
+        style={{ background: theme.nodeBorder, width: '8px', height: '8px' }}
       />
 
       <div
         style={{
           padding: '12px',
-          background: isHighlighted ? theme.highlightBg : theme.headerBg,
+          background: isHighlighted ? theme.highlightBg : theme.nodeHeaderBg,
           borderBottom: expanded && hasColumns ? `1px solid ${theme.border}` : 'none',
           borderTopLeftRadius: '6px',
           borderTopRightRadius: '6px',
@@ -98,12 +105,36 @@ export default function TableNode({
           }}
         >
           <TableIcon />
-          <TruncatedText
-            text={data.label}
-            subtitle={data.kind ? kindLabel : undefined}
-            subtitleColor={kindColor}
-            style={{ flex: 1, minWidth: 0, marginLeft: '4px' }}
-          />
+          <div style={{ flex: 1, minWidth: 0, marginLeft: '4px', lineHeight: 1.3 }}>
+            <TruncatedText
+              text={baseName}
+              style={{ display: 'block', fontWeight: 600 }}
+            />
+            {showAliasLine && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    fontFamily: '"JetBrains Mono", monospace',
+                    color: theme.joinBg,
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                  }}
+                >
+                  as {alias}
+                </span>
+              </div>
+            )}
+          </div>
           {data.kind && (
             <span
               style={{
@@ -113,7 +144,7 @@ export default function TableNode({
                 marginLeft: '8px',
                 padding: '2px 6px',
                 borderRadius: '4px',
-                background: `${kindColor}18`,
+                background: `${kindColor}24`,
                 flexShrink: 0,
               }}
             >
@@ -219,7 +250,7 @@ export default function TableNode({
                   padding: '6px 12px',
                   color: theme.textMuted,
                   borderBottom:
-                    idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.bg}`,
+                    idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.nodeHeaderBg}`,
                   cursor: 'pointer',
                   background: isSelectedCol || isSearchCol ? theme.highlightBg : 'transparent',
                 }}
@@ -256,7 +287,7 @@ export default function TableNode({
       <Handle
         type="source"
         position={sourcePosition}
-        style={{ background: theme.border, width: '8px', height: '8px' }}
+        style={{ background: theme.nodeBorder, width: '8px', height: '8px' }}
       />
     </div>
   );

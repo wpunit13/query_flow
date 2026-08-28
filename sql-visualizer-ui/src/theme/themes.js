@@ -17,7 +17,7 @@ function buildTheme(palette) {
     ...palette,
     kindLabels,
     kindColors: {
-      physical_table: palette.textMuted,
+      physical_table: palette.kindTable || palette.textMuted,
       cte: palette.kindCte,
       subquery: palette.kindSubquery,
       view: palette.kindView,
@@ -35,8 +35,11 @@ export const lightTheme = buildTheme({
   shellBg: '#e2e8f0',
   bg: '#f1f5f9',
   cardBg: '#ffffff',
+  nodeBg: '#ffffff',
+  nodeHeaderBg: '#f8fafc',
   toolbarBg: '#ffffff',
   border: '#cbd5e1',
+  nodeBorder: '#94a3b8',
   headerBg: '#f8fafc',
   textMain: '#0f172a',
   textMuted: '#64748b',
@@ -66,7 +69,7 @@ export const lightTheme = buildTheme({
   unionText: '#4338ca',
   joinSurface: '#fffbeb',
   joinText: '#92400e',
-  edgeStroke: '#94a3b8',
+  edgeStroke: '#64748b',
   backgroundGrid: '#cbd5e1',
   minimapMask: 'rgba(241, 245, 249, 0.65)',
   shadowCard: '0 1px 3px rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.04)',
@@ -94,6 +97,7 @@ export const lightTheme = buildTheme({
   kindSubquery: '#7c3aed',
   kindView: '#0284c7',
   kindMerge: '#db2777',
+  kindTable: '#475569',
 });
 
 export const darkTheme = buildTheme({
@@ -101,8 +105,11 @@ export const darkTheme = buildTheme({
   shellBg: '#030712',
   bg: '#111827',
   cardBg: '#1f2937',
+  nodeBg: '#1f2937',
+  nodeHeaderBg: '#273549',
   toolbarBg: '#1f2937',
-  border: '#374151',
+  border: '#4b5563',
+  nodeBorder: '#9ca3af',
   headerBg: '#1f2937',
   textMain: '#f3f4f6',
   textMuted: '#9ca3af',
@@ -132,8 +139,8 @@ export const darkTheme = buildTheme({
   unionText: '#c7d2fe',
   joinSurface: '#422006',
   joinText: '#fcd34d',
-  edgeStroke: '#6b7280',
-  backgroundGrid: '#374151',
+  edgeStroke: '#d1d5db',
+  backgroundGrid: '#4b5563',
   minimapMask: 'rgba(17, 24, 39, 0.8)',
   shadowCard: '0 1px 3px rgb(0 0 0 / 0.35)',
   shadowSubtle: '0 1px 2px rgb(0 0 0 / 0.25)',
@@ -160,6 +167,7 @@ export const darkTheme = buildTheme({
   kindSubquery: '#a78bfa',
   kindView: '#38bdf8',
   kindMerge: '#f472b6',
+  kindTable: '#9ca3af',
 });
 
 export const THEME_MODES = {

@@ -1,6 +1,7 @@
 import dagre from 'dagre';
 import { Position } from '@xyflow/react';
 import { theme } from '../theme';
+import { formatTableNodeLabel } from './lineageTableModel';
 
 export const LAYOUT_MODES = {
   TB: 'TB',
@@ -17,13 +18,14 @@ const KIND_BADGE_WIDTH = 44;
 const COL_COUNT_WIDTH = 56;
 const HEADER_ACTIONS_WIDTH = 56;
 const HEADER_PADDING = 28;
-const JOIN_WIDTH_COLLAPSED = 180;
-const JOIN_WIDTH_EXPANDED = 220;
+const JOIN_WIDTH_COLLAPSED = 248;
+const JOIN_WIDTH_EXPANDED = 320;
 const HEADER_HEIGHT = 48;
 const COLLAPSED_TABLE_HEIGHT = 48;
 const EMPTY_TABLE_HEIGHT = 44;
-const JOIN_HEADER_HEIGHT = 40;
-const JOIN_CONDITION_ROW = 36;
+const JOIN_HEADER_HEIGHT = 47;
+const JOIN_OPERANDS_HEIGHT = 72;
+const JOIN_CONDITION_ROW = 56;
 const COLUMN_ROW_HEIGHT = 28;
 const COLUMN_ROW_WITH_SOURCES = 44;
 const COLUMN_LIST_PADDING = 8;
@@ -55,6 +57,20 @@ function horizontalOverlap(ax, aw, bx, bw) {
   return ax < bx + bw && ax + aw > bx;
 }
 
+function tableHeaderExtraHeight(node) {
+  const alias = node.data?.alias;
+  const base = String(node.data?.label || node.id || '');
+  const id = String(node.id || '');
+  if (
+    alias &&
+    alias.toLowerCase() !== base.toLowerCase() &&
+    alias.toLowerCase() !== id.toLowerCase()
+  ) {
+    return 14;
+  }
+  return 0;
+}
+
 function columnRowHeight(node, col) {
   const lineage = node.data?.column_lineage || [];
   const entry = lineage.find((e) => e.name === col);
@@ -64,7 +80,7 @@ function columnRowHeight(node, col) {
 
 /** Header row can grow past minWidth when labels are long — layout must match rendered width. */
 function estimateTableWidth(node) {
-  const label = String(node.data?.label || '');
+  const label = String(formatTableNodeLabel(node));
   const hasKind = Boolean(node.data?.kind);
   const colCount = node.data?.columns?.length || 0;
   const showColCount = colCount > 0 && !node.data?.expanded;
@@ -74,6 +90,13 @@ function estimateTableWidth(node) {
     TABLE_ICON_WIDTH +
     label.length * CHAR_WIDTH_ESTIMATE +
     HEADER_ACTIONS_WIDTH;
+  if (tableHeaderExtraHeight(node) > 0) {
+    width += 24;
+  }
+  const alias = node.data?.alias;
+  if (alias && String(alias).length > 0) {
+    width += 36;
+  }
   if (hasKind) width += KIND_BADGE_WIDTH;
   if (showColCount) width += COL_COUNT_WIDTH;
 
@@ -88,24 +111,42 @@ export const getNodeDimensions = (node) => {
   if (node.type === 'joinNode' || node.type === 'unionNode') {
     const conditions = node.data?.conditions?.length || 0;
     const branches = node.data?.branches?.length || 0;
-    const expandable = conditions > 0 || branches > 0;
+    const operandLines =
+      node.type === 'joinNode' ? node.data?.join_operands?.length || 0 : 0;
+    const expandable =
+      node.type === 'joinNode'
+        ? conditions > 0 || operandLines > 0
+        : conditions > 0 || branches > 0;
+
     if (!node.data?.expanded || !expandable) {
       return { width: JOIN_WIDTH_COLLAPSED, height: JOIN_HEADER_HEIGHT };
     }
+
+    const operandHeight =
+      node.type === 'joinNode' && operandLines > 0 ? JOIN_OPERANDS_HEIGHT : 0;
     const rows = node.type === 'unionNode' ? branches : conditions;
+    const rawSqlExtra = node.type === 'joinNode' && conditions > 0 ? conditions * 18 : 0;
+
     return {
       width: JOIN_WIDTH_EXPANDED,
-      height: JOIN_HEADER_HEIGHT + rows * JOIN_CONDITION_ROW,
+      height: JOIN_HEADER_HEIGHT + operandHeight + rows * JOIN_CONDITION_ROW + rawSqlExtra,
     };
   }
 
   const colCount = node.data?.columns?.length || 0;
+  const headerExtra = tableHeaderExtraHeight(node);
   if (!colCount) {
-    return { width: estimateTableWidth(node), height: EMPTY_TABLE_HEIGHT };
+    return {
+      width: estimateTableWidth(node),
+      height: EMPTY_TABLE_HEIGHT + headerExtra,
+    };
   }
 
   if (!node.data?.expanded) {
-    return { width: estimateTableWidth(node), height: COLLAPSED_TABLE_HEIGHT };
+    return {
+      width: estimateTableWidth(node),
+      height: COLLAPSED_TABLE_HEIGHT + headerExtra,
+    };
   }
 
   const columns = node.data.columns || [];
@@ -510,7 +551,7 @@ export const styleApiEdges = (edges) =>
     ...edge,
     type: 'default',
     animated: false,
-    style: { stroke: theme.edgeStroke, strokeWidth: 2, transition: 'all 0.3s ease' },
+    style: { stroke: theme.edgeStroke, strokeWidth: 2.75, transition: 'all 0.3s ease' },
   }));
 
 export const initializeApiNodes = (nodes) =>

@@ -37,6 +37,9 @@ export function useKeyboardShortcuts({
 
       if (isInput && e.key !== 'Escape') return;
 
+      // Let the browser keep Cmd/Ctrl shortcuts (Cmd+R refresh, Cmd+F find, etc.).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
       switch (e.key) {
         case 'f':
           if (!isInput) {

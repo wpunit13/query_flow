@@ -63,8 +63,20 @@ def test_v1_parse_sql_with_join():
         },
     )
     assert response.status_code == 200
-    kinds = {n["data"]["kind"] for n in response.json()["nodes"]}
+    body = response.json()
+    kinds = {n["data"]["kind"] for n in body["nodes"]}
     assert "join" in kinds
+
+    users = next(n for n in body["nodes"] if n["id"] == "users")
+    orders = next(n for n in body["nodes"] if n["id"] == "orders")
+    assert users["data"]["alias"] == "u"
+    assert orders["data"]["alias"] == "o"
+
+    join = next(n for n in body["nodes"] if n["data"]["kind"] == "join")
+    operands = join["data"]["join_operands"]
+    assert len(operands) == 2
+    assert operands[0]["label"] == "u (users)"
+    assert operands[1]["label"] == "o (orders)"
 
 
 def test_cors_allows_vite_dev_origin():

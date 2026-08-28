@@ -37,6 +37,12 @@ export function formatOperandLabel(node) {
   return alias || base;
 }
 
+/** Primary header label for table nodes — surfaces SQL alias used in join conditions. */
+export function formatTableNodeLabel(node) {
+  if (!node) return '—';
+  return formatOperandLabel(node);
+}
+
 export function isPipelineQuery(nodes) {
   return nodes.some(
     (n) => n.data?.kind === 'cte' || n.data?.kind === 'subquery'

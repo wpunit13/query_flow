@@ -1,5 +1,6 @@
 import { LAYOUT_MODES } from '../utils/dagreLayout';
 import { VIEW_MODES } from '../utils/lineageTableModel';
+import { GRAPH_DETAIL_MODES } from '../constants/graphDetailMode';
 import { useTheme } from '../context/ThemeContext';
 import { toolbarButtonStyle, inputFieldStyle } from '../theme/uiStyles';
 import ExportMenu from './ExportMenu';
@@ -32,6 +33,9 @@ export default function GraphToolbar({
   onExportCsv,
   onExportOpenLineage,
   canExport,
+  compoundGraphEligible,
+  graphDetailMode,
+  onToggleGraphDetail,
 }) {
   const { theme: t } = useTheme();
   const isGraph = viewMode === VIEW_MODES.GRAPH;
@@ -77,6 +81,18 @@ export default function GraphToolbar({
           >
             → LR
           </button>
+
+          {compoundGraphEligible && (
+            <button
+              style={btn(graphDetailMode === GRAPH_DETAIL_MODES.COMPOUND)}
+              onClick={onToggleGraphDetail}
+              title="Pipeline stages vs full table graph"
+            >
+              {graphDetailMode === GRAPH_DETAIL_MODES.COMPOUND
+                ? 'Full graph'
+                : 'Pipeline stages'}
+            </button>
+          )}
 
           <span style={{ color: t.border, margin: '0 4px' }}>|</span>
 

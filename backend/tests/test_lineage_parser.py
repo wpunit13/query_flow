@@ -194,6 +194,31 @@ def test_recursive_cte_union_anchor_branch_connected():
     assert "join_RecursiveDepartmentHierarchy_1" in incoming
 
 
+def test_product_margin_snapshot_left_join_includes_subquery_operand():
+    sql = Path(__file__).resolve().parent / "fixtures" / "large_multifeature.sql"
+    result = parse_sql_to_lineage(sql.read_text())
+    join2 = next(
+        n for n in result["nodes"] if n["id"] == "join_ProductMarginSnapshot_2"
+    )
+    operands = join2["data"]["join_operands"]
+    assert len(operands) == 2
+    assert operands[1]["label"] == "cost"
+    assert "INNER JOIN" in operands[0]["label"]
+    assert "p (products)" in operands[0]["label"]
+
+
+def test_join_left_operand_uses_from_alias_not_cte_inner_alias():
+    result = parse_sql_to_lineage(LARGE_MULTIFEATURE_SQL.read_text())
+    join = _node(result, "join_Final_Output_1")
+    operands = join["data"]["join_operands"]
+    left = next(op for op in operands if op["side"] == "left")
+    right = next(op for op in operands if op["side"] == "right")
+    assert left["label"].startswith("roh ")
+    assert "RecursiveOrgHierarchy" in left["label"]
+    assert right["label"].startswith("rsp ")
+    assert "RegionalStorePerformance" in right["label"]
+
+
 def test_join_operands_include_sql_aliases():
     sql = (
         "SELECT p.project_id FROM projects p "

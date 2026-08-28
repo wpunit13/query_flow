@@ -21,8 +21,27 @@ class ColumnLineageEntry(BaseModel):
     )
 
 
+class JoinOperand(BaseModel):
+    side: str = Field(..., description="Join side label (left, right, etc.)")
+    id: str = Field(..., description="Upstream node id for this operand")
+    label: str = Field(
+        ...,
+        description="Display label, often SQL alias with table (e.g. p (products))",
+    )
+
+
+class UnionBranch(BaseModel):
+    index: int = Field(..., description="Branch index in the UNION")
+    tail_id: str = Field(..., description="Leaf upstream node id for this branch")
+    label: str = Field(..., description="Human-readable branch label")
+
+
 class NodeData(BaseModel):
     label: str = Field(..., description="Display label for the graph node")
+    alias: Optional[str] = Field(
+        default=None,
+        description="SQL table/subquery alias from the query (e.g. p for products p)",
+    )
     columns: List[str] = Field(default_factory=list, description="Output column names when expanded")
     conditions: List[str] = Field(
         default_factory=list,
@@ -41,6 +60,17 @@ class NodeData(BaseModel):
     dialect: Optional[str] = Field(default=None, description="Dialect used when the node was parsed")
     join_type: Optional[str] = Field(default=None, description="Join type label for join nodes")
     join_order: Optional[int] = Field(default=None, description="Position of this join in the join chain")
+    join_operands: List[JoinOperand] = Field(
+        default_factory=list,
+        description="Left/right join operands with SQL alias labels",
+    )
+    union_type: Optional[str] = Field(default=None, description="Union type label for union nodes")
+    union_order: Optional[int] = Field(default=None, description="Position of this union in the query")
+    branch_count: Optional[int] = Field(default=None, description="Number of UNION branches")
+    branches: List[UnionBranch] = Field(
+        default_factory=list,
+        description="UNION branch metadata for union nodes",
+    )
     column_lineage: List[ColumnLineageEntry] = Field(
         default_factory=list,
         description="Per-column upstream lineage on output nodes",

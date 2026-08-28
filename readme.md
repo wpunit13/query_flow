@@ -8,13 +8,36 @@ Built for data engineers and analysts who need to debug long, production-grade q
 
 ## Demo
 
-![Render SQL, LR layout, and graph exploration](docs/assets/demo-overview.gif)
+Short screen captures of the current UI. Re-record with `cd scripts && npm run record` (backend + UI must be running). Details and per-GIF fixtures: [docs/assets/README.md](docs/assets/README.md).
 
-![Expand a node and trace column lineage](docs/assets/demo-column-trace.gif)
+| GIF | Recorded with fixture |
+|-----|------------------------|
+| `demo-overview.gif`, `demo-column-trace.gif`, `demo-table-view.gif` | `backend/tests/fixtures/notworking.sql` |
+| `demo-pipeline-stages.gif` | `backend/tests/fixtures/large_multifeature.sql` |
 
-![Table view — Pipeline stages and stage detail](docs/assets/demo-table-view.gif)
+### Graph overview — parse, layout, and selection
 
-To re-record: [docs/assets/README.md](docs/assets/README.md) — `cd scripts && npm run record` (backend + UI must be running).
+Render a multi-CTE query, switch to **LR** layout, briefly open **Table → Pipeline**, return to the graph, and click a node to highlight its path.
+
+![Graph overview — Render, LR layout, table peek, node selection](docs/assets/demo-overview.gif)
+
+### Column lineage trace
+
+Expand a table or output node and click **trace** on a column to highlight upstream sources on the graph.
+
+![Column trace — expand node and highlight upstream column lineage](docs/assets/demo-column-trace.gif)
+
+### Table view — pipeline stages
+
+Open **Table** view, use the **Pipeline** tab, select a stage row, and inspect stage detail (sources, joins, columns).
+
+![Table view — Pipeline tab and stage detail panel](docs/assets/demo-table-view.gif)
+
+### Graph — pipeline stage boxes
+
+Macro **Pipeline stages** graph view: one box per CTE/stage, **Expand** for joins and tables inside, click a stage for path highlight. Recorded automatically via `npm run record` using `large_multifeature.sql` (65-node pipeline).
+
+![Pipeline stage graph — stage boxes, expand internals, path highlight](docs/assets/demo-pipeline-stages.gif)
 
 ---
 
@@ -55,6 +78,7 @@ To re-record: [docs/assets/README.md](docs/assets/README.md) — `cd scripts && 
   - **TB** — Top-to-bottom (default)
   - **LR** — Left-to-right
 - **Graph / Table view** — Toggle in the graph toolbar (`G` / `T`); table has Sources, Pipeline, Operations, and Output tabs
+- **Pipeline stage graph** — For CTE/subquery pipelines (≥ 8 nodes), default macro view shows one box per stage; **Expand** opens joins/tables inside; toggle **Full graph** for the flat DAG
 - **Diff mode** — Compare two renders of the same query; new nodes and edges highlighted in green.
 - **Reset canvas** — Restore full visibility, collapse state, and layout in one click.
 

@@ -18,6 +18,7 @@ const CSS_VAR_MAP = {
   shellBg: '--ls-shell-bg',
   cardBg: '--ls-card-bg',
   border: '--ls-border',
+  nodeBorder: '--ls-node-border',
   headerBg: '--ls-header-bg',
   textMain: '--ls-text-main',
   textMuted: '--ls-text-muted',
