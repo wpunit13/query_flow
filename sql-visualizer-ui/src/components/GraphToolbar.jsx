@@ -28,6 +28,9 @@ export default function GraphToolbar({
   selectedNodeId,
   onShowShortcuts,
   filterNoMatches,
+  studioMode,
+  onToggleZen,
+  zenMode,
 }) {
   return (
     <div
@@ -122,6 +125,18 @@ export default function GraphToolbar({
           +{diffSummary.addedNodes} nodes, −{diffSummary.removedNodes} removed
         </span>
       )}
+
+      {studioMode === 'explore' && (
+        <button
+          style={btnStyle(zenMode)}
+          onClick={onToggleZen}
+          title="Zen mode — full-screen graph (Z)"
+        >
+          {zenMode ? 'Exit Zen' : 'Zen'}
+        </button>
+      )}
+
+      <span style={{ color: theme.border, margin: '0 4px' }}>|</span>
 
       <button
         style={{ ...btnStyle(false), marginLeft: 'auto' }}

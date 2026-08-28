@@ -1,9 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+import { getApiBaseUrl } from './apiBase';
 
 export const DEFAULT_DIALECT = 'bigquery';
 
 export async function fetchDialects() {
-  const response = await fetch(`${API_BASE_URL}/api/dialects`);
+  const response = await fetch(`${getApiBaseUrl()}/api/dialects`);
   if (!response.ok) {
     throw new Error(`Failed to load dialects (${response.status})`);
   }
@@ -11,7 +11,7 @@ export async function fetchDialects() {
 }
 
 export async function detectDialect(sql) {
-  const response = await fetch(`${API_BASE_URL}/api/detect-dialect`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/detect-dialect`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sql }),

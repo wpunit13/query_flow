@@ -9,6 +9,7 @@ import GraphCanvas from './components/GraphCanvas';
 import GraphToolbar from './components/GraphToolbar';
 import BreadcrumbBar from './components/BreadcrumbBar';
 import ShortcutsModal from './components/ShortcutsModal';
+import ZenFloatingControls from './components/ZenFloatingControls';
 import { LAYOUT_MODES } from './utils/dagreLayout';
 
 export default function App() {
@@ -28,7 +29,11 @@ export default function App() {
     onLayoutLR: () => graph.handleLayoutChange(LAYOUT_MODES.LR),
     onLayoutRadial: () => graph.handleLayoutChange(LAYOUT_MODES.RADIAL),
     onToggleDiff: () => graph.setShowShortcuts(true),
+    onToggleStudioMode: graph.handleToggleStudioMode,
+    onToggleZen: graph.handleToggleZen,
     enabled: !graph.showShortcuts,
+    zenMode: graph.zenMode,
+    studioMode: graph.studioMode,
   });
 
   const onFlowInit = (instance) => {
@@ -39,6 +44,9 @@ export default function App() {
   const graphActions = {
     onColumnSelect: graph.onColumnSelect,
   };
+
+  const isExplore = graph.studioMode === 'explore';
+  const shellPadding = isExplore ? '8px' : '20px';
 
   return (
     <GraphActionsContext.Provider value={graphActions}>
@@ -51,12 +59,17 @@ export default function App() {
           bottom: 0,
           display: 'flex',
           flexDirection: 'column',
-          padding: '20px',
+          padding: shellPadding,
           fontFamily: '"Inter", sans-serif',
           background: '#f1f5f9',
         }}
       >
         <StudioHeader
+          studioMode={graph.studioMode}
+          onEnterAuthor={graph.handleEnterAuthor}
+          onEnterExplore={graph.handleEnterExplore}
+          hasRenderedGraph={graph.hasRenderedGraph}
+          sqlIsStale={graph.sqlIsStale}
           sql={graph.sql}
           onSqlChange={graph.setSql}
           dialect={graph.dialect}
@@ -89,28 +102,37 @@ export default function App() {
             borderRadius: '8px',
             background: theme.bg,
             overflow: 'hidden',
+            position: 'relative',
+            minHeight: 0,
           }}
         >
-          <GraphToolbar
-            layoutMode={graph.layoutMode}
-            onLayoutChange={graph.handleLayoutChange}
-            branchFilter={graph.branchFilter}
-            onBranchFilterChange={graph.handleBranchFilterChange}
-            focusMode={graph.focusMode}
-            onFocusUpstream={graph.handleFocusUpstream}
-            onFocusDownstream={graph.handleFocusDownstream}
-            onClearFocus={graph.handleClearFocus}
-            diffMode={graph.diffMode}
-            onToggleDiffMode={graph.handleToggleDiffMode}
-            diffSummary={graph.diffSummary}
-            selectedNodeId={graph.selectedNodeId}
-            onShowShortcuts={() => graph.setShowShortcuts(true)}
-            filterNoMatches={graph.filterNoMatches}
-          />
-          <BreadcrumbBar
-            breadcrumb={graph.breadcrumb}
-            selectedColumn={graph.selectedColumn}
-          />
+          {!graph.zenMode && (
+            <>
+              <GraphToolbar
+                layoutMode={graph.layoutMode}
+                onLayoutChange={graph.handleLayoutChange}
+                branchFilter={graph.branchFilter}
+                onBranchFilterChange={graph.handleBranchFilterChange}
+                focusMode={graph.focusMode}
+                onFocusUpstream={graph.handleFocusUpstream}
+                onFocusDownstream={graph.handleFocusDownstream}
+                onClearFocus={graph.handleClearFocus}
+                diffMode={graph.diffMode}
+                onToggleDiffMode={graph.handleToggleDiffMode}
+                diffSummary={graph.diffSummary}
+                selectedNodeId={graph.selectedNodeId}
+                onShowShortcuts={() => graph.setShowShortcuts(true)}
+                filterNoMatches={graph.filterNoMatches}
+                studioMode={graph.studioMode}
+                onToggleZen={graph.handleToggleZen}
+                zenMode={graph.zenMode}
+              />
+              <BreadcrumbBar
+                breadcrumb={graph.breadcrumb}
+                selectedColumn={graph.selectedColumn}
+              />
+            </>
+          )}
           <GraphCanvas
             nodes={graph.nodes}
             edges={graph.edges}
@@ -119,7 +141,15 @@ export default function App() {
             onInit={onFlowInit}
             onNodeClick={graph.onNodeClick}
             onPaneClick={graph.onPaneClick}
+            showMinimap={!graph.zenMode}
           />
+          {graph.zenMode && (
+            <ZenFloatingControls
+              onFitView={() => graph.fitGraphToView()}
+              onToggleZen={graph.handleToggleZen}
+              onEnterAuthor={graph.handleEnterAuthor}
+            />
+          )}
         </div>
         <ShortcutsModal
           open={graph.showShortcuts}

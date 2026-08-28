@@ -1,0 +1,17 @@
+# Phase 1 — local / demo deployment (single container: API + static UI)
+# Usage:
+#   docker compose up --build
+#   open http://localhost:8080
+
+services:
+  sql-lineage-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sql-lineage-studio:local
+    container_name: sql-lineage-studio
+    ports:
+      - "8080:8000"
+    environment:
+      STATIC_DIR: /app/static
+    restart: unless-stopped

@@ -128,7 +128,7 @@ Dialect is currently hardcoded to `bigquery` in the UI.
 
 ### Tasks
 
-- [ ] `GET /health` endpoint
+- [x] `GET /health` endpoint
 - [ ] `GET /ready` endpoint
 - [ ] Prometheus metrics: parse latency
 - [ ] Prometheus metrics: parse success / failure rate
@@ -247,7 +247,7 @@ Replace `alert()` and basic errors with production-grade feedback.
 
 ---
 
-## Enterprise Deployment Model (P2)
+## Enterprise Deployment Model
 
 | Model | Fit |
 |---|---|
@@ -255,21 +255,37 @@ Replace `alert()` and basic errors with production-grade feedback.
 | Single-tenant VPC | Docker/K8s Helm chart, customer cloud |
 | Air-gapped on-prem | No external deps, offline SQLGlot |
 
-### Tasks
+### Phase 1 — Local / demo (Docker)
 
-- [ ] Multi-stage `Dockerfile` (API + static UI)
-- [ ] `docker-compose.yml` for local / demo deployments
-- [ ] Kubernetes Helm chart
-- [ ] Helm: HPA, ingress, secrets templates
-- [ ] SBOM generation
-- [ ] Dependency scanning (Dependabot / Snyk)
-- [ ] SaaS: multi-tenant data isolation
-- [ ] SaaS: usage metering / billing hooks
-- [ ] VPC deploy guide and reference architecture
-- [ ] Air-gapped / on-prem deploy guide (no external network)
-- [ ] SOC2-oriented docs: data retention policy (SQL not stored by default)
-- [ ] SOC2-oriented docs: encryption (TLS, at-rest)
-- [ ] SOC2-oriented docs: access controls and audit requirements
+Single-container image: FastAPI + built React UI on one port.
+
+| Task | Status |
+|------|--------|
+| Multi-stage `Dockerfile` (build UI → copy into Python image) | [x] |
+| `docker-compose.yml` for local runs | [x] |
+| `GET /health` for container healthcheck | [x] |
+| Same-origin API URL when UI is served by the app | [x] |
+
+```bash
+docker compose up --build
+# UI + API → http://localhost:8080
+```
+
+### Phase 2 — Production / enterprise (later)
+
+| Task | Status |
+|------|--------|
+| Kubernetes Helm chart | [ ] |
+| Helm: HPA, ingress, secrets templates | [ ] |
+| SBOM generation | [ ] |
+| Dependency scanning (Dependabot / Snyk) | [ ] |
+| SaaS: multi-tenant data isolation | [ ] |
+| SaaS: usage metering / billing hooks | [ ] |
+| VPC deploy guide and reference architecture | [ ] |
+| Air-gapped / on-prem deploy guide (no external network) | [ ] |
+| SOC2-oriented docs: data retention policy (SQL not stored by default) | [ ] |
+| SOC2-oriented docs: encryption (TLS, at-rest) | [ ] |
+| SOC2-oriented docs: access controls and audit requirements | [ ] |
 
 ---
 
@@ -285,7 +301,7 @@ Replace `alert()` and basic errors with production-grade feedback.
 
 - [ ] Pin all Python and npm dependencies
 - [ ] Fix missing frontend deps in `package.json`
-- [ ] Docker + docker-compose
+- [x] Docker + docker-compose (Phase 1 — see Enterprise Deployment Model)
 - [ ] CI: lint, test, build on every PR
 - [ ] Authentication (JWT / OIDC)
 - [ ] Rate limiting and request size caps
@@ -315,7 +331,8 @@ Replace `alert()` and basic errors with production-grade feedback.
 - [x] Dialect dropdown + `VITE_API_URL` env var
 - [x] Pin `requirements.txt` and fix `package.json` deps (deps added; pinning pending)
 - [x] Delete commented-out code in `main.py` and `bkp_app_jsx`
-- [ ] Add `GET /health` and SQL size validation (e.g. max 500KB)
+- [x] Add `GET /health` endpoint
+- [ ] SQL size validation (e.g. max 500KB)
 - [x] Replace `alert()` with inline error banner
 - [x] Add pytest cases using `notworking.sql` and simpler fixtures
 

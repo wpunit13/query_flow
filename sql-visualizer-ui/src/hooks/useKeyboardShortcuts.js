@@ -11,7 +11,11 @@ export function useKeyboardShortcuts({
   onLayoutLR,
   onLayoutRadial,
   onToggleDiff,
+  onToggleStudioMode,
+  onToggleZen,
   enabled = true,
+  zenMode = false,
+  studioMode = 'author',
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -59,6 +63,18 @@ export function useKeyboardShortcuts({
             onFocusDownstream?.();
           }
           break;
+        case 'e':
+          if (!isInput) {
+            e.preventDefault();
+            onToggleStudioMode?.();
+          }
+          break;
+        case 'z':
+          if (!isInput && studioMode === 'explore') {
+            e.preventDefault();
+            onToggleZen?.();
+          }
+          break;
         case '1':
           if (!isInput) onLayoutTB?.();
           break;
@@ -80,6 +96,8 @@ export function useKeyboardShortcuts({
     return () => window.removeEventListener('keydown', handler);
   }, [
     enabled,
+    zenMode,
+    studioMode,
     onFocusSearch,
     onFitView,
     onReset,
@@ -90,5 +108,7 @@ export function useKeyboardShortcuts({
     onLayoutLR,
     onLayoutRadial,
     onToggleDiff,
+    onToggleStudioMode,
+    onToggleZen,
   ]);
 }

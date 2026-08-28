@@ -52,7 +52,8 @@ Built for data engineers and analysts who need to debug long, production-grade q
 
 ## Getting started
 
-Run the **backend** and **frontend** in separate terminals.
+**Default:** run the **backend** and **frontend** in separate terminals (no Docker required).  
+**Optional:** single-container Docker for a demo or local “all-in-one” deploy — see section 3.
 
 ### Prerequisites
 
@@ -85,13 +86,31 @@ npm run dev
 
 Open **http://localhost:5173**
 
-Optional — custom API URL (`sql-visualizer-ui/.env`):
+The dev server calls the API at **http://127.0.0.1:8000** by default (backend and UI on different ports). To point at another host, set `sql-visualizer-ui/.env`:
 
 ```env
 VITE_API_URL=http://127.0.0.1:8000
 ```
 
-### 3. Run tests
+### 3. Docker (optional — single container)
+
+Runs the API and built UI together. No separate frontend dev server.
+
+**Prerequisites:** Docker with Compose v2
+
+```bash
+cd /path/to/hackathon
+
+docker compose up --build
+```
+
+Open **http://localhost:8080** (maps to port 8000 inside the container).
+
+The UI uses same-origin API calls in this mode (`VITE_API_URL` is empty at build time). Health check: **http://localhost:8080/health**
+
+For local dev with hot reload, use sections 1 and 2 — Docker is not required.
+
+### 4. Run tests
 
 ```bash
 pytest
@@ -130,6 +149,19 @@ Use the **Dialect** dropdown above the SQL editor before **Render DAG**. The cho
 **Detect** runs keyword heuristics on your SQL and suggests a dialect (with confidence and matched signals). It is a hint, not a guarantee — pick the engine you are actually targeting.
 
 Editor syntax highlighting uses the closest CodeMirror SQL dialect (BigQuery/Snowflake → standard SQL; Postgres/Redshift/DuckDB → PostgreSQL-style). Limitations per dialect are shown as the dropdown option tooltip from the API.
+
+### Explore & Zen modes
+
+After a **successful Render DAG**, the UI switches to **Explore mode**: the SQL editor collapses to a slim summary bar so the graph uses most of the screen. Use **Edit SQL** or **`E`** to open the full editor (**Author mode**). Use **Back to Explore** or **`E`** again to return to the graph **without re-rendering** (shows the last successful parse). If you edited SQL without rendering, Explore shows **SQL changed — Render to update**.
+
+| Mode | What you see |
+|------|----------------|
+| **Author** | Full SQL editor, dialect, errors/warnings |
+| **Explore** | Summary bar + graph toolbar + breadcrumb |
+| **Zen** (within Explore) | Graph only + floating Fit / Edit / Exit Zen |
+
+- **Zen** — toolbar and breadcrumb hidden; minimap off. Toggle with the **Zen** button or `Z`. Exit with **Exit Zen**, `Z`, or `Esc`.
+- **Parse errors** keep you in Author mode so you can fix SQL.
 
 ---
 
@@ -356,7 +388,7 @@ Enterprise and production hardening items are tracked in [ENTERPRISE_ROADMAP.md]
 
 **Completed:** architecture refactor, lineage accuracy (section 4), advanced graph UX (section 9).
 
-**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and deployment (Docker/K8s).
+**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose up --build`.
 
 ---
 

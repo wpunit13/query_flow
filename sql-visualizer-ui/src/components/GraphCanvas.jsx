@@ -18,6 +18,7 @@ export default function GraphCanvas({
   onInit,
   onNodeClick,
   onPaneClick,
+  showMinimap = true,
 }) {
   const nodeTypes = useMemo(
     () => ({ tableNode: TableNode, joinNode: JoinNode }),
@@ -41,23 +42,25 @@ export default function GraphCanvas({
       >
         <Background color="#e2e8f0" gap={20} size={1} />
         <Controls style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-        <MiniMap
-          nodeColor={minimapNodeColor}
-          nodeStrokeColor={minimapNodeStrokeColor}
-          nodeStrokeWidth={3}
-          nodeBorderRadius={4}
-          maskColor="rgba(241, 245, 249, 0.6)"
-          pannable={true}
-          zoomable={true}
-          style={{
-            border: `1px solid ${theme.border}`,
-            borderRadius: '8px',
-            overflow: 'hidden',
-            backgroundColor: 'white',
-            width: 240,
-            height: 180,
-          }}
-        />
+        {showMinimap && (
+          <MiniMap
+            nodeColor={minimapNodeColor}
+            nodeStrokeColor={minimapNodeStrokeColor}
+            nodeStrokeWidth={3}
+            nodeBorderRadius={4}
+            maskColor="rgba(241, 245, 249, 0.6)"
+            pannable={true}
+            zoomable={true}
+            style={{
+              border: `1px solid ${theme.border}`,
+              borderRadius: '8px',
+              overflow: 'hidden',
+              backgroundColor: 'white',
+              width: 240,
+              height: 180,
+            }}
+          />
+        )}
       </ReactFlow>
     </div>
   );

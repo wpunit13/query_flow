@@ -3,8 +3,14 @@ import { ResetIcon, SearchIcon } from '../icons';
 import SqlEditor from './SqlEditor';
 import ParseFeedback from './ParseFeedback';
 import DialectSelector from './DialectSelector';
+import ExploreSummaryBar from './ExploreSummaryBar';
 
 export default function StudioHeader({
+  studioMode,
+  onEnterAuthor,
+  onEnterExplore,
+  hasRenderedGraph,
+  sqlIsStale,
   sql,
   onSqlChange,
   dialect,
@@ -28,6 +34,29 @@ export default function StudioHeader({
   sqlEditorRef,
   searchInputRef,
 }) {
+  if (studioMode === 'explore') {
+    return (
+      <ExploreSummaryBar
+        sql={sql}
+        dialect={dialect}
+        dialects={dialects}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+        onSearchKeyDown={onSearchKeyDown}
+        searchResults={searchResults}
+        searchIndex={searchIndex}
+        onEnterAuthor={onEnterAuthor}
+        onParse={onParse}
+        onReset={onReset}
+        loading={loading}
+        parseError={parseError}
+        warnings={warnings}
+        sqlIsStale={sqlIsStale}
+        searchInputRef={searchInputRef}
+      />
+    );
+  }
+
   return (
     <div
       style={{
@@ -108,6 +137,27 @@ export default function StudioHeader({
               </span>
             )}
           </div>
+
+          {hasRenderedGraph && (
+            <button
+              type="button"
+              onClick={onEnterExplore}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: 'white',
+                color: theme.primary,
+                border: `1px solid ${theme.primary}`,
+                borderRadius: '6px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                height: '36px',
+              }}
+              title="Back to graph without re-rendering (E)"
+            >
+              Back to Explore
+            </button>
+          )}
 
           <button
             onClick={onReset}

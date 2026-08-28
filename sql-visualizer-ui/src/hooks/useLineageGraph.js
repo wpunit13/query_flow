@@ -75,6 +75,8 @@ export function useLineageGraph(fitGraphToView) {
   const [dialects, setDialects] = useState(FALLBACK_DIALECTS);
   const [detectingDialect, setDetectingDialect] = useState(false);
   const [detectHint, setDetectHint] = useState('');
+  const [studioMode, setStudioMode] = useState('author');
+  const [zenMode, setZenMode] = useState(false);
 
   const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.TB);
   const [branchFilter, setBranchFilter] = useState('');
@@ -92,6 +94,7 @@ export function useLineageGraph(fitGraphToView) {
   const searchInputRef = useRef(null);
   const sqlEditorRef = useRef(null);
   const sqlRef = useRef(DEFAULT_SQL);
+  const [lastParsedSql, setLastParsedSql] = useState(null);
 
   useEffect(() => {
     fetchDialects()
@@ -304,7 +307,12 @@ export function useLineageGraph(fitGraphToView) {
         }))
       );
       fitGraphToView();
+      setLastParsedSql(sqlToParse);
+      setStudioMode('explore');
+      setZenMode(false);
     } catch (error) {
+      setStudioMode('author');
+      setZenMode(false);
       setWarnings([]);
       if (error.name === 'ParseSqlError') {
         setParseError({
@@ -372,6 +380,9 @@ export function useLineageGraph(fitGraphToView) {
   };
 
   const handleResetCanvas = () => {
+    setStudioMode('author');
+    setZenMode(false);
+    setLastParsedSql(null);
     setBranchFilter('');
     setFilterNoMatches(false);
     setFocusMode(null);
@@ -594,7 +605,37 @@ export function useLineageGraph(fitGraphToView) {
     if (nodes.length > 0) fitGraphToView(instance);
   };
 
+  const handleEnterAuthor = () => {
+    setStudioMode('author');
+    setZenMode(false);
+  };
+
+  const handleEnterExplore = () => {
+    if (!baseNodes.length) return;
+    setStudioMode('explore');
+    setZenMode(false);
+    setTimeout(() => fitGraphToView(), 80);
+  };
+
+  const handleToggleStudioMode = () => {
+    if (studioMode === 'explore') {
+      handleEnterAuthor();
+    } else if (baseNodes.length > 0) {
+      handleEnterExplore();
+    }
+  };
+
+  const handleToggleZen = () => {
+    if (studioMode !== 'explore') return;
+    setZenMode((prev) => !prev);
+    setTimeout(() => fitGraphToView(), 80);
+  };
+
   const handleClearSelection = () => {
+    if (zenMode) {
+      setZenMode(false);
+      return;
+    }
     onPaneClick();
     setFocusMode(null);
     handleBranchFilterChange(branchFilter);
@@ -650,5 +691,13 @@ export function useLineageGraph(fitGraphToView) {
     fitGraphToView,
     handleClearSelection,
     filterNoMatches,
+    studioMode,
+    zenMode,
+    hasRenderedGraph: baseNodes.length > 0,
+    sqlIsStale: lastParsedSql !== null && sql !== lastParsedSql,
+    handleEnterAuthor,
+    handleEnterExplore,
+    handleToggleStudioMode,
+    handleToggleZen,
   };
 }
