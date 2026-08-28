@@ -14,5 +14,3 @@ sql-visualizer-ui/dist
 .pytest_cache
 .cursor
 agent-transcripts
-failed_error.sql
-notworking.sql

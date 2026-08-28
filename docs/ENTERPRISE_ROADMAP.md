@@ -261,13 +261,13 @@ Single-container image: FastAPI + built React UI on one port.
 
 | Task | Status |
 |------|--------|
-| Multi-stage `Dockerfile` (build UI → copy into Python image) | [x] |
-| `docker-compose.yml` for local runs | [x] |
+| Multi-stage `deploy/Dockerfile` (build UI → copy into Python image) | [x] |
+| `deploy/docker-compose.yml` for local runs | [x] |
 | `GET /health` for container healthcheck | [x] |
 | Same-origin API URL when UI is served by the app | [x] |
 
 ```bash
-docker compose up --build
+docker compose -f deploy/docker-compose.yml up --build
 # UI + API → http://localhost:8080
 ```
 
@@ -334,7 +334,7 @@ docker compose up --build
 - [x] Add `GET /health` endpoint
 - [ ] SQL size validation (e.g. max 500KB)
 - [x] Replace `alert()` with inline error banner
-- [x] Add pytest cases using `notworking.sql` and simpler fixtures
+- [x] Add pytest cases using `backend/tests/fixtures/notworking.sql` and simpler inline fixtures
 
 ---
 

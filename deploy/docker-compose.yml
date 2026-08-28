@@ -1,13 +1,15 @@
 # Phase 1 — local / demo deployment (single container: API + static UI)
-# Usage:
+# Usage (from repo root):
+#   docker compose -f deploy/docker-compose.yml up --build
+# Or from this folder:
 #   docker compose up --build
 #   open http://localhost:8080
 
 services:
   sql-lineage-studio:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: deploy/Dockerfile
     image: sql-lineage-studio:local
     container_name: sql-lineage-studio
     ports:

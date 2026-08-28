@@ -101,7 +101,13 @@ Runs the API and built UI together. No separate frontend dev server.
 ```bash
 cd /path/to/hackathon
 
-docker compose up --build
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+Or from `deploy/`:
+
+```bash
+cd deploy && docker compose up --build
 ```
 
 Open **http://localhost:8080** (maps to port 8000 inside the container).
@@ -340,7 +346,7 @@ Invalid SQL example: `SELECT FROM` → click the error line to land on the typo.
 5. Type `project_name` in **header search** (not filter branch) to find all nodes with that column.
 6. Turn on **± Diff**, render, edit SQL, render again to see new tables/joins.
 
-Try `notworking.sql` in the repo for a stress test (recursive CTEs, lateral joins, `MERGE`, `ROLLUP`, etc.).
+Try `backend/tests/fixtures/notworking.sql` for a stress test (recursive CTEs, lateral joins, `MERGE`, `ROLLUP`, etc.).
 
 ---
 
@@ -365,30 +371,41 @@ Try `notworking.sql` in the repo for a stress test (recursive CTEs, lateral join
 
 ```
 backend/
-  api/routes/lineage.py       # API routes
-  models/lineage.py           # Pydantic schemas
-  services/lineage_parser.py  # AST → graph
-  services/sql_preprocessor.py
+  api/routes/                 # API routes
+  models/                     # Pydantic schemas
+  services/                   # AST → graph, dialects, parse errors
   tests/
+    fixtures/                 # SQL fixtures (e.g. notworking.sql)
+    test_*.py
 
 sql-visualizer-ui/
   src/components/             # Graph canvas, toolbar, nodes
   src/hooks/                  # Lineage graph & layout logic
   src/utils/                  # Dagre layout, diff, path utilities
-  src/api/lineageClient.js
+  src/api/                    # API clients
 
-main.py                       # FastAPI entrypoint
+deploy/
+  Dockerfile                  # Multi-stage image (UI + API)
+  docker-compose.yml          # Local single-container run
+
+docs/
+  ENTERPRISE_ROADMAP.md       # Enterprise / production backlog
+
+main.py                       # FastAPI entrypoint (uvicorn main:app)
+pytest.ini
+requirements.txt
+readme.md
 ```
 
 ---
 
 ## Roadmap
 
-Enterprise and production hardening items are tracked in [ENTERPRISE_ROADMAP.md](ENTERPRISE_ROADMAP.md).
+Enterprise and production hardening items are tracked in [ENTERPRISE_ROADMAP.md](docs/ENTERPRISE_ROADMAP.md).
 
 **Completed:** architecture refactor, lineage accuracy (section 4), advanced graph UX (section 9).
 
-**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose up --build`.
+**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `docs/ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose -f deploy/docker-compose.yml up --build`.
 
 ---
 

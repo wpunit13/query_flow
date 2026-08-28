@@ -6,7 +6,7 @@ import sqlglot
 from backend.services.lineage_parser import parse_sql_to_lineage
 
 
-NOTWORKING_SQL = Path(__file__).resolve().parents[2] / "notworking.sql"
+NOTWORKING_SQL = Path(__file__).resolve().parent / "fixtures" / "notworking.sql"
 
 
 def _node(result, node_id):

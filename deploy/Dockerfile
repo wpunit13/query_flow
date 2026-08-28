@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# Build context: repository root (see deploy/docker-compose.yml)
 
 # --- Stage 1: build React UI ---
 FROM node:20-alpine AS ui-builder
