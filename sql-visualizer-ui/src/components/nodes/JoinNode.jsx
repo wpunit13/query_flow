@@ -4,7 +4,12 @@ import { EyeIcon, EyeOffIcon } from '../../icons';
 import { toggleNodeCollapse } from '../../utils/graphVisibility';
 import { useGraphActions } from '../../context/GraphActionsContext';
 
-export default function JoinNode({ id, data }) {
+export default function JoinNode({
+  id,
+  data,
+  sourcePosition = Position.Bottom,
+  targetPosition = Position.Top,
+}) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
 
@@ -23,7 +28,7 @@ export default function JoinNode({ id, data }) {
         minWidth: expanded ? '200px' : 'auto',
         boxShadow: isHighlighted
           ? `0 0 15px ${theme.highlight}`
-          : '0 2px 4px rgb(0 0 0 / 0.05)',
+          : theme.shadowSubtle,
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.2s ease',
         display: 'flex',
@@ -32,7 +37,7 @@ export default function JoinNode({ id, data }) {
         zIndex: expanded ? 6 : 2,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <Handle type="target" position={targetPosition} style={{ opacity: 0 }} />
 
       <div
         style={{
@@ -107,8 +112,8 @@ export default function JoinNode({ id, data }) {
         <div
           style={{
             padding: '8px 12px',
-            background: '#fef3c7',
-            color: '#92400e',
+            background: theme.joinSurface,
+            color: theme.joinText,
             fontSize: '11px',
             fontFamily: '"JetBrains Mono", monospace',
             borderTop: `1px solid ${theme.joinBg}40`,
@@ -126,7 +131,7 @@ export default function JoinNode({ id, data }) {
         </div>
       )}
 
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+      <Handle type="source" position={sourcePosition} style={{ opacity: 0 }} />
     </div>
   );
 }

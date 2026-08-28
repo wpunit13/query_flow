@@ -5,7 +5,8 @@ import {
   MiniMap,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { theme, minimapNodeColor, minimapNodeStrokeColor } from '../theme';
+import { minimapNodeColor, minimapNodeStrokeColor } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 import { flowNodeTypes } from './nodes/flowNodeTypes';
 
 export default function GraphCanvas({
@@ -18,8 +19,16 @@ export default function GraphCanvas({
   onPaneClick,
   showMinimap = true,
 }) {
+  const { theme } = useTheme();
+
   return (
-    <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+    <div
+      style={{
+        flexGrow: 1,
+        overflow: 'hidden',
+        background: theme.bg,
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -32,23 +41,24 @@ export default function GraphCanvas({
         minZoom={0.02}
         maxZoom={2}
         fitViewOptions={{ padding: 0.08, minZoom: 0.02, maxZoom: 1 }}
+        style={{ background: theme.bg }}
       >
-        <Background color="#e2e8f0" gap={20} size={1} />
-        <Controls style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+        <Background color={theme.backgroundGrid} gap={20} size={1} />
+        <Controls style={{ boxShadow: theme.shadowCard }} />
         {showMinimap && (
           <MiniMap
             nodeColor={minimapNodeColor}
             nodeStrokeColor={minimapNodeStrokeColor}
             nodeStrokeWidth={3}
             nodeBorderRadius={4}
-            maskColor="rgba(241, 245, 249, 0.6)"
+            maskColor={theme.minimapMask}
             pannable={true}
             zoomable={true}
             style={{
               border: `1px solid ${theme.border}`,
               borderRadius: '8px',
               overflow: 'hidden',
-              backgroundColor: 'white',
+              backgroundColor: theme.cardBg,
               width: 240,
               height: 180,
             }}

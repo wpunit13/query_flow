@@ -6,7 +6,13 @@ import { useGraphActions } from '../../context/GraphActionsContext';
 import { getNodeDimensions } from '../../utils/dagreLayout';
 import TruncatedText from '../TruncatedText';
 
-export default function TableNode({ id, data, type = 'tableNode' }) {
+export default function TableNode({
+  id,
+  data,
+  type = 'tableNode',
+  sourcePosition = Position.Bottom,
+  targetPosition = Position.Top,
+}) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
 
@@ -22,9 +28,9 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
   const kindColor = kindColors[data.kind] || theme.textMuted;
 
   const borderColor = data.diffStatus === 'added'
-    ? '#10b981'
+    ? theme.success
     : isActiveSearch
-      ? '#d97706'
+      ? theme.warning
       : isHighlighted
         ? theme.highlight
         : isColumnSource
@@ -55,7 +61,7 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
             ? `0 0 20px ${theme.highlight}`
             : isHighlighted
               ? `0 0 15px ${theme.highlight}80`
-              : '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+              : theme.shadowCard,
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.3s ease',
         zIndex: expanded ? 8 : 1,
@@ -63,14 +69,14 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={targetPosition}
         style={{ background: theme.border, width: '8px', height: '8px' }}
       />
 
       <div
         style={{
           padding: '12px',
-          background: isHighlighted ? '#fef3c7' : theme.headerBg,
+          background: isHighlighted ? theme.highlightBg : theme.headerBg,
           borderBottom: expanded && hasColumns ? `1px solid ${theme.border}` : 'none',
           borderTopLeftRadius: '6px',
           borderTopRightRadius: '6px',
@@ -118,7 +124,7 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
             <span
               style={{
                 fontSize: '9px',
-                color: '#10b981',
+                color: theme.success,
                 marginLeft: '6px',
                 fontWeight: '700',
                 flexShrink: 0,
@@ -157,7 +163,7 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
               }}
               style={{
                 cursor: 'pointer',
-                backgroundColor: data.collapsed ? theme.primary : '#e2e8f0',
+                backgroundColor: data.collapsed ? theme.primary : theme.mutedSurface,
                 color: data.collapsed ? 'white' : theme.textMuted,
                 border: 'none',
                 borderRadius: '4px',
@@ -215,14 +221,14 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
                   borderBottom:
                     idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.bg}`,
                   cursor: 'pointer',
-                  background: isSelectedCol || isSearchCol ? '#fef3c7' : 'transparent',
+                  background: isSelectedCol || isSearchCol ? theme.highlightBg : 'transparent',
                 }}
               >
                 <TruncatedText
                   text={col}
                   style={{
                     fontWeight: '600',
-                    color: isSearchCol ? '#d97706' : theme.textMain,
+                    color: isSearchCol ? theme.warning : theme.textMain,
                     display: 'block',
                   }}
                 />
@@ -249,7 +255,7 @@ export default function TableNode({ id, data, type = 'tableNode' }) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={sourcePosition}
         style={{ background: theme.border, width: '8px', height: '8px' }}
       />
     </div>

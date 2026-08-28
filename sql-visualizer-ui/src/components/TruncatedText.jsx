@@ -100,7 +100,7 @@ function TooltipContent({
         background: theme.cardBg,
         border: `1px solid ${theme.border}`,
         borderRadius: '8px',
-        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        boxShadow: theme.shadowTooltip,
         fontFamily: '"Inter", sans-serif',
         pointerEvents: 'auto',
         opacity: positioned ? 1 : 0,

@@ -9,7 +9,6 @@ export function useKeyboardShortcuts({
   onFocusDownstream,
   onLayoutTB,
   onLayoutLR,
-  onLayoutRadial,
   onToggleDiff,
   onToggleStudioMode,
   onToggleZen,
@@ -96,9 +95,6 @@ export function useKeyboardShortcuts({
         case '2':
           if (!isInput) onLayoutLR?.();
           break;
-        case '3':
-          if (!isInput) onLayoutRadial?.();
-          break;
         case '?':
           if (!isInput) onToggleDiff?.();
           break;
@@ -121,7 +117,6 @@ export function useKeyboardShortcuts({
     onFocusDownstream,
     onLayoutTB,
     onLayoutLR,
-    onLayoutRadial,
     onToggleDiff,
     onToggleStudioMode,
     onToggleZen,

@@ -1,6 +1,58 @@
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   height: 100vh;
   width: 100vw;
+  background: var(--ls-shell-bg, #e2e8f0);
+  color: var(--ls-text-main, #0f172a);
+}
+
+.react-flow,
+.react-flow__pane,
+.react-flow__viewport {
+  background: var(--ls-bg) !important;
+}
+
+/* React Flow may leave a .dark class after colorMode — neutralize it */
+.react-flow.dark,
+.react-flow.dark .react-flow__pane {
+  background: var(--ls-bg) !important;
+}
+
+.react-flow__controls {
+  box-shadow: var(--ls-shadow-card, 0 1px 3px rgb(0 0 0 / 0.08));
+  border: 1px solid var(--ls-border, #cbd5e1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: var(--ls-card-bg, #fff) !important;
+  border-bottom: 1px solid var(--ls-border, #cbd5e1) !important;
+  color: var(--ls-text-main, #0f172a) !important;
+  fill: var(--ls-text-main, #0f172a) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--ls-header-bg, #f8fafc) !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--ls-edge-stroke, #94a3b8);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ls-text-muted, #64748b);
+  opacity: 0.85;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }

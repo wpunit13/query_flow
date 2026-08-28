@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
-import { theme, kindLabels, kindColors } from '../theme';
+import { kindLabels, kindColors } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { toolbarButtonStyle } from '../theme/uiStyles';
 import { getColumnLineageHighlight } from '../utils/lineagePath';
 import {
   TABLE_TABS,
@@ -16,26 +18,8 @@ import {
   isPipelineQuery,
 } from '../utils/lineageTableModel';
 
-const thStyle = {
-  textAlign: 'left',
-  padding: '8px 12px',
-  fontSize: '11px',
-  fontWeight: '600',
-  color: theme.textMuted,
-  borderBottom: `1px solid ${theme.border}`,
-  background: theme.headerBg,
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle = {
-  padding: '8px 12px',
-  fontSize: '12px',
-  color: theme.textMain,
-  borderBottom: `1px solid ${theme.border}`,
-  verticalAlign: 'top',
-};
-
 function KindBadge({ kind }) {
+  const { theme } = useTheme();
   const label = kindLabels[kind] || kind;
   const color = kindColors[kind] || theme.textMuted;
   return (
@@ -55,6 +39,27 @@ function KindBadge({ kind }) {
 }
 
 function DataTable({ columns, rows, emptyMessage }) {
+  const { theme } = useTheme();
+
+  const thStyle = {
+    textAlign: 'left',
+    padding: '8px 12px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: theme.textMuted,
+    borderBottom: `1px solid ${theme.border}`,
+    background: theme.headerBg,
+    whiteSpace: 'nowrap',
+  };
+
+  const tdStyle = {
+    padding: '8px 12px',
+    fontSize: '12px',
+    color: theme.textMain,
+    borderBottom: `1px solid ${theme.border}`,
+    verticalAlign: 'top',
+  };
+
   if (!rows.length) {
     return (
       <div style={{ padding: '24px', color: theme.textMuted, fontSize: '13px' }}>
@@ -79,7 +84,11 @@ function DataTable({ columns, rows, emptyMessage }) {
             onClick={row.onClick}
             style={{
               cursor: row.onClick ? 'pointer' : 'default',
-              background: row.selected ? '#eff6ff' : row.dimmed ? '#f8fafc' : 'white',
+              background: row.selected
+                ? theme.rowSelectedBg
+                : row.dimmed
+                  ? theme.rowMutedBg
+                  : theme.cardBg,
               opacity: row.dimmed ? 0.45 : 1,
             }}
           >
@@ -102,7 +111,9 @@ function StageDetailPanel({
   edges,
   selectedColumn,
   columnHighlight,
+  onClear,
 }) {
+  const { theme } = useTheme();
   if (!stageNode) return null;
 
   const stageId = stageNode.id;
@@ -136,6 +147,24 @@ function StageDetailPanel({
           <span style={{ fontSize: '11px', color: theme.textMuted }}>
             Column trace: <strong>{selectedColumn}</strong>
           </span>
+        )}
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            style={{
+              marginLeft: 'auto',
+              fontSize: '11px',
+              padding: '4px 10px',
+              border: `1px solid ${theme.border}`,
+              borderRadius: '6px',
+              background: theme.buttonBg,
+              color: theme.textMuted,
+              cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
         )}
       </div>
 
@@ -173,7 +202,7 @@ function StageDetailPanel({
                     padding: '3px 8px',
                     borderRadius: '4px',
                     background: col === selectedColumn ? theme.primary : theme.cardBg,
-                    color: col === selectedColumn ? 'white' : theme.textMain,
+                    color: col === selectedColumn ? theme.onPrimary : theme.textMain,
                     border: `1px solid ${theme.border}`,
                     opacity: inPath ? 1 : 0.4,
                   }}
@@ -271,8 +300,17 @@ export default function LineageTableView({
   onToggleShowAllOperations,
   onNodeSelect,
   onColumnSelect,
-  onStageExpand,
+  onClearSelection,
 }) {
+  const { theme } = useTheme();
+
+  const toggleNodeSelection = (id) => {
+    if (selectedNodeId === id && !selectedColumn) {
+      onClearSelection?.();
+    } else {
+      onNodeSelect(id);
+    }
+  };
   const pipelineQuery = isPipelineQuery(nodes);
   const sourceNodes = getSourceNodes(nodes);
   const pipelineStages = topologicalSortStages(nodes, edges);
@@ -320,7 +358,7 @@ export default function LineageTableView({
       key: id,
       selected: selectedNodeId === id,
       dimmed,
-      onClick: () => onNodeSelect(id),
+      onClick: () => toggleNodeSelection(id),
       cells: {
         name: (
           <span style={{ fontWeight: '600' }}>{n.data?.label || id}</span>
@@ -345,10 +383,7 @@ export default function LineageTableView({
       key: id,
       selected: expandedStageId === id || selectedNodeId === id,
       dimmed,
-      onClick: () => {
-        onStageExpand(id);
-        onNodeSelect(id);
-      },
+      onClick: () => toggleNodeSelection(id),
       cells: {
         step: index + 1,
         name: (
@@ -424,8 +459,8 @@ export default function LineageTableView({
               padding: '4px 8px',
               border: `1px solid ${theme.primary}`,
               borderRadius: '4px',
-              background: isSelected ? theme.primary : 'white',
-              color: isSelected ? 'white' : theme.primary,
+              background: isSelected ? theme.primary : theme.buttonBg,
+              color: isSelected ? theme.onPrimary : theme.primary,
               cursor: 'pointer',
             }}
           >
@@ -453,7 +488,7 @@ export default function LineageTableView({
           gap: '4px',
           padding: '8px 12px',
           borderBottom: `1px solid ${theme.border}`,
-          background: 'white',
+          background: theme.toolbarBg,
         }}
       >
         {tabs.map((tab) => (
@@ -468,7 +503,7 @@ export default function LineageTableView({
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
-              background: tableTab === tab.id ? '#eff6ff' : 'transparent',
+              background: tableTab === tab.id ? theme.buttonActiveBg : 'transparent',
               color: tableTab === tab.id ? theme.primary : theme.textMuted,
             }}
           >
@@ -496,7 +531,7 @@ export default function LineageTableView({
               padding: '4px 10px',
               border: `1px solid ${theme.border}`,
               borderRadius: '6px',
-              background: showAllOperations ? '#eff6ff' : 'white',
+              background: showAllOperations ? theme.buttonActiveBg : theme.buttonBg,
               color: showAllOperations ? theme.primary : theme.textMuted,
               cursor: 'pointer',
             }}
@@ -575,6 +610,7 @@ export default function LineageTableView({
             edges={edges}
             selectedColumn={selectedColumn}
             columnHighlight={columnHighlight}
+            onClear={onClearSelection}
           />
         )}
 

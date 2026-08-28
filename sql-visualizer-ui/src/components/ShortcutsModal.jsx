@@ -1,6 +1,9 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { primaryButtonStyle } from '../theme/uiStyles';
 
 export default function ShortcutsModal({ open, onClose }) {
+  const { theme } = useTheme();
+
   if (!open) return null;
 
   const shortcuts = [
@@ -16,7 +19,6 @@ export default function ShortcutsModal({ open, onClose }) {
     { keys: 'D', desc: 'Focus downstream of selected node' },
     { keys: '1', desc: 'Layout: top-to-bottom' },
     { keys: '2', desc: 'Layout: left-to-right' },
-    { keys: '3', desc: 'Layout: radial' },
     { keys: '?', desc: 'Show this help' },
     { keys: 'Enter', desc: 'Cycle search matches (in search box)' },
   ];
@@ -26,7 +28,7 @@ export default function ShortcutsModal({ open, onClose }) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15, 23, 42, 0.4)',
+        background: theme.overlayBg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -36,12 +38,13 @@ export default function ShortcutsModal({ open, onClose }) {
     >
       <div
         style={{
-          background: 'white',
+          background: theme.cardBg,
+          border: `1px solid ${theme.border}`,
           borderRadius: '8px',
           padding: '24px',
           maxWidth: '400px',
           width: '90%',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+          boxShadow: theme.shadowMenu,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -55,10 +58,12 @@ export default function ShortcutsModal({ open, onClose }) {
               <kbd
                 style={{
                   background: theme.headerBg,
+                  border: `1px solid ${theme.border}`,
                   padding: '2px 8px',
                   borderRadius: '4px',
                   fontFamily: 'monospace',
                   fontSize: '12px',
+                  color: theme.textMain,
                 }}
               >
                 {s.keys}
@@ -70,15 +75,10 @@ export default function ShortcutsModal({ open, onClose }) {
         <button
           onClick={onClose}
           style={{
+            ...primaryButtonStyle(theme),
             marginTop: '20px',
             width: '100%',
             padding: '8px',
-            background: theme.primary,
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600',
           }}
         >
           Close

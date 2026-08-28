@@ -8,9 +8,11 @@ Built for data engineers and analysts who need to debug long, production-grade q
 
 ## Demo
 
-![Render SQL and explore the lineage graph](docs/assets/demo-overview.gif)
+![Render SQL, LR layout, and graph exploration](docs/assets/demo-overview.gif)
 
 ![Expand a node and trace column lineage](docs/assets/demo-column-trace.gif)
+
+![Table view — Pipeline stages and stage detail](docs/assets/demo-table-view.gif)
 
 To re-record: [docs/assets/README.md](docs/assets/README.md) — `cd scripts && npm run record` (backend + UI must be running).
 
@@ -52,7 +54,7 @@ To re-record: [docs/assets/README.md](docs/assets/README.md) — `cd scripts && 
 - **Layout modes**
   - **TB** — Top-to-bottom (default)
   - **LR** — Left-to-right
-  - **Radial** — Concentric layout for overview-style reading
+- **Graph / Table view** — Toggle in the graph toolbar (`G` / `T`); table has Sources, Pipeline, Operations, and Output tabs
 - **Diff mode** — Compare two renders of the same query; new nodes and edges highlighted in green.
 - **Reset canvas** — Restore full visibility, collapse state, and layout in one click.
 
@@ -282,7 +284,6 @@ Use this when a large source table clutters the view but you still want to see h
 |------|-----|----------|
 | **↓ TB** | `1` | Default — vertical flow, reading top-to-bottom |
 | **→ LR** | `2` | Wide queries — horizontal flow |
-| **◎ Radial** | `3` | Overview — concentric rings |
 
 Changing layout **re-runs dagre** and may move nodes. Use **F** or **Reset** if the canvas feels off after a layout change.
 
@@ -342,7 +343,6 @@ Search query is cleared on **Render DAG**, not on **Reset** alone — use **R** 
 | `D` | Focus downstream of selected node |
 | `1` | Layout: top-to-bottom |
 | `2` | Layout: left-to-right |
-| `3` | Layout: radial |
 | `?` | Show shortcuts help |
 | `Enter` | Cycle search matches (while search box is focused) |
 

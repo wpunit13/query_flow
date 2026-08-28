@@ -1,9 +1,11 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { panelHeaderStyle, outlinePrimaryButtonStyle, secondaryButtonStyle, primaryButtonStyle } from '../theme/uiStyles';
 import { ResetIcon, SearchIcon } from '../icons';
 import SqlEditor from './SqlEditor';
 import ParseFeedback from './ParseFeedback';
 import DialectSelector from './DialectSelector';
 import ExploreSummaryBar from './ExploreSummaryBar';
+import ThemeToggle from './ThemeToggle';
 
 export default function StudioHeader({
   studioMode,
@@ -34,6 +36,8 @@ export default function StudioHeader({
   sqlEditorRef,
   searchInputRef,
 }) {
+  const { theme } = useTheme();
+
   if (studioMode === 'explore') {
     return (
       <ExploreSummaryBar
@@ -60,11 +64,7 @@ export default function StudioHeader({
   return (
     <div
       style={{
-        marginBottom: '20px',
-        background: 'white',
-        padding: '16px 20px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 2px rgb(0 0 0 / 0.05)',
+        ...panelHeaderStyle(theme),
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
@@ -79,9 +79,12 @@ export default function StudioHeader({
           gap: '12px',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: '18px', color: theme.textMain }}>
-          SQL Lineage Studio
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', color: theme.textMain }}>
+            SQL Lineage Studio
+          </h2>
+          <ThemeToggle size="sm" />
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div
@@ -128,7 +131,7 @@ export default function StudioHeader({
               <span
                 style={{
                   fontSize: '11px',
-                  color: '#dc2626',
+                  color: theme.error,
                   whiteSpace: 'nowrap',
                   marginLeft: '8px',
                 }}
@@ -143,15 +146,9 @@ export default function StudioHeader({
               type="button"
               onClick={onEnterExplore}
               style={{
-                padding: '8px 16px',
-                backgroundColor: 'white',
-                color: theme.primary,
-                border: `1px solid ${theme.primary}`,
-                borderRadius: '6px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
+                ...outlinePrimaryButtonStyle(theme),
                 height: '36px',
+                whiteSpace: 'nowrap',
               }}
               title="Back to graph without re-rendering (E)"
             >
@@ -162,22 +159,15 @@ export default function StudioHeader({
           <button
             onClick={onReset}
             style={{
-              padding: '8px 16px',
-              backgroundColor: 'white',
-              color: theme.textMain,
-              border: `1px solid ${theme.border}`,
-              borderRadius: '6px',
-              fontWeight: '600',
-              cursor: 'pointer',
+              ...secondaryButtonStyle(theme),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'background 0.2s',
-              whiteSpace: 'nowrap',
               height: '36px',
+              whiteSpace: 'nowrap',
             }}
             onMouseOver={(e) => (e.currentTarget.style.backgroundColor = theme.headerBg)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'white')}
+            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = theme.cardBg)}
           >
             <ResetIcon />
             Reset
@@ -186,16 +176,11 @@ export default function StudioHeader({
             onClick={onParse}
             disabled={loading}
             style={{
+              ...primaryButtonStyle(theme, loading),
               padding: '8px 24px',
-              backgroundColor: loading ? '#94a3b8' : theme.primary,
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontWeight: '600',
-              cursor: loading ? 'default' : 'pointer',
-              whiteSpace: 'nowrap',
               height: '36px',
               minWidth: '120px',
+              whiteSpace: 'nowrap',
             }}
           >
             {loading ? 'Parsing…' : 'Render DAG'}

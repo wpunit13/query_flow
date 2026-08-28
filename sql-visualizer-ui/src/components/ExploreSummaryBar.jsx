@@ -1,5 +1,7 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { panelHeaderStyle } from '../theme/uiStyles';
 import { SearchIcon } from '../icons';
+import ThemeToggle from './ThemeToggle';
 
 function sqlSummary(sql) {
   const lines = sql.split('\n');
@@ -26,21 +28,19 @@ export default function ExploreSummaryBar({
   sqlIsStale,
   searchInputRef,
 }) {
+  const { theme } = useTheme();
   const { preview, lineCount } = sqlSummary(sql);
   const dialectLabel = dialects.find((d) => d.id === dialect)?.label || dialect;
 
   return (
     <div
       style={{
-        marginBottom: '8px',
-        background: 'white',
-        padding: '10px 14px',
-        borderRadius: '8px',
-        boxShadow: '0 1px 2px rgb(0 0 0 / 0.05)',
+        ...panelHeaderStyle(theme),
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
         flexWrap: 'wrap',
+        marginBottom: '8px',
       }}
     >
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
@@ -117,13 +117,14 @@ export default function ExploreSummaryBar({
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <ThemeToggle size="sm" />
         <button
           type="button"
           onClick={onEnterAuthor}
           style={{
             padding: '7px 14px',
-            background: 'white',
+            background: theme.cardBg,
             border: `1px solid ${theme.border}`,
             borderRadius: '6px',
             fontSize: '12px',
@@ -140,7 +141,7 @@ export default function ExploreSummaryBar({
           onClick={onReset}
           style={{
             padding: '7px 12px',
-            background: 'white',
+            background: theme.cardBg,
             border: `1px solid ${theme.border}`,
             borderRadius: '6px',
             fontSize: '12px',
@@ -157,8 +158,8 @@ export default function ExploreSummaryBar({
           disabled={loading}
           style={{
             padding: '7px 18px',
-            background: loading ? '#94a3b8' : theme.primary,
-            color: 'white',
+            background: loading ? theme.disabled : theme.primary,
+            color: theme.onPrimary,
             border: 'none',
             borderRadius: '6px',
             fontSize: '12px',

@@ -1,9 +1,10 @@
 import dagre from 'dagre';
+import { Position } from '@xyflow/react';
+import { theme } from '../theme';
 
 export const LAYOUT_MODES = {
   TB: 'TB',
   LR: 'LR',
-  RADIAL: 'RADIAL',
 };
 
 const TABLE_WIDTH = 240;
@@ -28,7 +29,27 @@ const COLUMN_ROW_WITH_SOURCES = 44;
 const COLUMN_LIST_PADDING = 8;
 const MIN_NODESEP = 100;
 const MIN_RANKSEP = 120;
+const LR_MIN_RANKSEP = 64;
+const LR_MIN_NODESEP = 140;
 const OVERLAP_GAP = 36;
+
+/** Edge attachment: TB = top/bottom, LR = left/right. */
+export function getHandlePositionsForLayout(layoutMode) {
+  if (layoutMode === LAYOUT_MODES.LR) {
+    return { sourcePosition: Position.Right, targetPosition: Position.Left };
+  }
+  return { sourcePosition: Position.Bottom, targetPosition: Position.Top };
+}
+
+export function applyLayoutHandlePositions(nodes, layoutMode) {
+  const { sourcePosition, targetPosition } = getHandlePositionsForLayout(layoutMode);
+  return nodes.map((node) => ({
+    ...node,
+    sourcePosition,
+    targetPosition,
+    data: { ...node.data, layoutMode },
+  }));
+}
 
 function horizontalOverlap(ax, aw, bx, bw) {
   return ax < bx + bw && ax + aw > bx;
@@ -95,8 +116,8 @@ export const getNodeDimensions = (node) => {
   };
 };
 
-/** Spacing scales with largest node so expanded CTEs don't overlap siblings or adjacent ranks. */
-function computeGraphSpacing(nodes) {
+/** Spacing scales with largest node — axis-aware for TB vs LR dagre rankdir. */
+function computeGraphSpacing(nodes, layoutMode = LAYOUT_MODES.TB) {
   const visible = nodes.filter((n) => !n.hidden);
   const maxHeight = visible.reduce(
     (max, n) => Math.max(max, getNodeDimensions(n).height),
@@ -106,9 +127,33 @@ function computeGraphSpacing(nodes) {
     (max, n) => Math.max(max, getNodeDimensions(n).width),
     TABLE_WIDTH
   );
+
+  if (layoutMode === LAYOUT_MODES.LR) {
+    // LR: ranksep = horizontal between columns, nodesep = vertical between siblings
+    return {
+      nodesep: Math.max(
+        LR_MIN_NODESEP,
+        Math.ceil(maxHeight * 0.7),
+        maxHeight + OVERLAP_GAP * 2,
+        Math.ceil(maxWidth * 0.25)
+      ),
+      // Compact horizontal start — tightenColumnSpacing fixes wide-node columns
+      ranksep: Math.max(
+        LR_MIN_RANKSEP,
+        Math.ceil(maxHeight * 0.65),
+        maxHeight + OVERLAP_GAP
+      ),
+    };
+  }
+
+  // TB: ranksep = vertical between ranks, nodesep = horizontal between siblings
   return {
     nodesep: Math.max(MIN_NODESEP, Math.ceil(maxWidth * 0.35)),
-    ranksep: Math.max(MIN_RANKSEP, Math.ceil(maxHeight * 0.65)),
+    ranksep: Math.max(
+      MIN_RANKSEP,
+      Math.ceil(maxHeight * 0.65),
+      maxHeight + OVERLAP_GAP
+    ),
   };
 }
 
@@ -160,24 +205,22 @@ function resolveNodeOverlaps(nodes, layoutMode, rankByNodeId = new Map()) {
               x: bPos.x,
               y: aPos.y + aDims.height + OVERLAP_GAP,
             });
-          } else {
-            positions.set(b.id, {
-              x: aPos.x + aDims.width + OVERLAP_GAP,
-              y: bPos.y,
-            });
+            moved = true;
           }
+          // Cross-column overlaps are handled by tightenColumnSpacing
         } else if (sameRank(a.id, b.id)) {
           positions.set(b.id, {
             x: aPos.x + aDims.width + OVERLAP_GAP,
             y: bPos.y,
           });
+          moved = true;
         } else {
           positions.set(b.id, {
             x: bPos.x,
             y: aPos.y + aDims.height + OVERLAP_GAP,
           });
+          moved = true;
         }
-        moved = true;
       }
     }
     if (!moved) break;
@@ -239,17 +282,140 @@ function tightenRankSpacing(nodes, layoutMode, rankByNodeId) {
   }));
 }
 
-/** Relayout after expand/collapse so spacing matches current node sizes. */
+/** LR: shift whole columns right only as needed — prevents overlap-resolver horizontal sprawl. */
+function tightenColumnSpacing(nodes, rankByNodeId) {
+  const visible = nodes.filter((n) => !n.hidden);
+  if (visible.length < 2) return nodes;
+
+  const byRank = new Map();
+  visible.forEach((n) => {
+    const rank = rankByNodeId.get(n.id);
+    if (rank == null) return;
+    if (!byRank.has(rank)) byRank.set(rank, []);
+    byRank.get(rank).push(n);
+  });
+
+  const ranks = [...byRank.keys()].sort((a, b) => a - b);
+  const positions = new Map(nodes.map((n) => [n.id, { ...n.position }]));
+
+  for (let i = 1; i < ranks.length; i += 1) {
+    const prevNodes = byRank.get(ranks[i - 1]) || [];
+    const currNodes = byRank.get(ranks[i]) || [];
+    if (!prevNodes.length || !currNodes.length) continue;
+
+    let prevRight = 0;
+    prevNodes.forEach((n) => {
+      const pos = positions.get(n.id);
+      const { width } = getNodeDimensions(n);
+      prevRight = Math.max(prevRight, pos.x + width);
+    });
+
+    let currMinX = Infinity;
+    currNodes.forEach((n) => {
+      currMinX = Math.min(currMinX, positions.get(n.id).x);
+    });
+
+    const minStart = prevRight + OVERLAP_GAP;
+    if (currMinX < minStart) {
+      const shift = minStart - currMinX;
+      currNodes.forEach((n) => {
+        const pos = positions.get(n.id);
+        positions.set(n.id, { x: pos.x + shift, y: pos.y });
+      });
+    }
+  }
+
+  return nodes.map((n) => ({
+    ...n,
+    position: positions.get(n.id) ?? n.position,
+  }));
+}
+
+/** Downstream node ids (targets reachable from nodeId). */
+export function getDownstreamNodeIds(nodeId, edges) {
+  const out = new Set();
+  const queue = [nodeId];
+  const visited = new Set([nodeId]);
+
+  while (queue.length > 0) {
+    const id = queue.shift();
+    edges.forEach((e) => {
+      if (e.source === id && !visited.has(e.target)) {
+        visited.add(e.target);
+        out.add(e.target);
+        queue.push(e.target);
+      }
+    });
+  }
+
+  return out;
+}
+
+/** Infer dagre-like ranks from current positions (for overlap resolution). */
+function buildRankIndex(nodes, layoutMode) {
+  const isLR = layoutMode === LAYOUT_MODES.LR;
+  const visible = nodes.filter((n) => !n.hidden);
+  const coords = visible.map((n) =>
+    isLR ? Math.round(n.position.x) : Math.round(n.position.y)
+  );
+  const unique = [...new Set(coords)].sort((a, b) => a - b);
+  const rankMap = new Map(unique.map((c, i) => [c, i]));
+  const map = new Map();
+
+  visible.forEach((n) => {
+    const coord = isLR ? Math.round(n.position.x) : Math.round(n.position.y);
+    map.set(n.id, rankMap.get(coord) ?? 0);
+  });
+
+  return map;
+}
+
+/** Relayout after expand/collapse — anchor top-left, push downstream, avoid full dagre jump. */
 export function adjustLayoutForExpandedToggle(nodes, edges, nodeId, layoutMode) {
   const node = nodes.find((n) => n.id === nodeId);
   if (!node) return nodes;
 
+  const oldDims = getNodeDimensions(node);
   const expanded = !node.data?.expanded;
   const toggledNodes = nodes.map((n) =>
     n.id === nodeId ? { ...n, data: { ...n.data, expanded } } : n
   );
+  const toggledNode = toggledNodes.find((n) => n.id === nodeId);
+  const newDims = getNodeDimensions(toggledNode);
 
-  return getLayoutedElements(toggledNodes, edges, layoutMode).nodes;
+  const deltaH = newDims.height - oldDims.height;
+  const deltaW = newDims.width - oldDims.width;
+
+  if (deltaH === 0 && deltaW === 0) {
+    return applyLayoutHandlePositions(toggledNodes, layoutMode);
+  }
+
+  const isLR = layoutMode === LAYOUT_MODES.LR;
+  const positions = new Map(nodes.map((n) => [n.id, { ...n.position }]));
+  const downstream = getDownstreamNodeIds(nodeId, edges);
+
+  if (isLR) {
+    downstream.forEach((id) => {
+      const pos = positions.get(id);
+      if (pos) positions.set(id, { x: pos.x + deltaW, y: pos.y });
+    });
+  } else {
+    downstream.forEach((id) => {
+      const pos = positions.get(id);
+      if (pos) positions.set(id, { x: pos.x, y: pos.y + deltaH });
+    });
+  }
+
+  let resultNodes = toggledNodes.map((n) => ({
+    ...n,
+    position: positions.get(n.id) ?? n.position,
+  }));
+
+  const rankByNodeId = buildRankIndex(resultNodes, layoutMode);
+  resultNodes = tightenRankSpacing(resultNodes, layoutMode, rankByNodeId);
+  resultNodes = resolveNodeOverlaps(resultNodes, layoutMode, rankByNodeId);
+
+  return applyLayoutHandlePositions(resultNodes, layoutMode);
 }
 
 export const ensureNodePositions = (nodes) =>
@@ -263,103 +429,21 @@ export const ensureNodePositions = (nodes) =>
         : { x: 0, y: 0 },
   }));
 
-function layoutRadial(nodes, edges) {
-  const visibleNodes = nodes.filter((n) => !n.hidden);
-  const visibleEdges = edges.filter((e) => !e.hidden);
-
-  const levels = new Map();
-  const incomingCount = new Map();
-  visibleNodes.forEach((n) => incomingCount.set(n.id, 0));
-  visibleEdges.forEach((e) => {
-    incomingCount.set(e.target, (incomingCount.get(e.target) || 0) + 1);
-  });
-
-  const roots = visibleNodes.filter((n) => incomingCount.get(n.id) === 0).map((n) => n.id);
-  roots.forEach((id) => levels.set(id, 0));
-
-  let frontier = [...roots];
-  const visited = new Set(roots);
-  while (frontier.length > 0) {
-    const next = [];
-    frontier.forEach((id) => {
-      visibleEdges
-        .filter((e) => e.source === id)
-        .forEach((e) => {
-          const newLevel = (levels.get(id) || 0) + 1;
-          if (!levels.has(e.target) || levels.get(e.target) < newLevel) {
-            levels.set(e.target, newLevel);
-          }
-          if (!visited.has(e.target)) {
-            visited.add(e.target);
-            next.push(e.target);
-          }
-        });
-    });
-    frontier = next;
-  }
-
-  visibleNodes.forEach((n) => {
-    if (!levels.has(n.id)) levels.set(n.id, 0);
-  });
-
-  const byLevel = {};
-  visibleNodes.forEach((n) => {
-    const level = levels.get(n.id);
-    if (!byLevel[level]) byLevel[level] = [];
-    byLevel[level].push(n);
-  });
-
-  const centerX = 500;
-  const centerY = 450;
-
-  const layoutedNodes = nodes.map((node) => {
-    if (node.hidden) {
-      return {
-        ...node,
-        position: node.position ?? { x: 0, y: 0 },
-      };
-    }
-    const level = levels.get(node.id) || 0;
-    const group = byLevel[level] || [node];
-    const index = group.findIndex((n) => n.id === node.id);
-    const count = group.length;
-    const spacing = computeGraphSpacing(visibleNodes);
-    const ringStep = Math.max(180, spacing.ranksep + spacing.nodesep);
-    const radius = 100 + level * ringStep;
-    const angle = (2 * Math.PI * index) / Math.max(count, 1) - Math.PI / 2;
-    const { width, height } = getNodeDimensions(node);
-    return {
-      ...node,
-      position: {
-        x: centerX + radius * Math.cos(angle) - width / 2,
-        y: centerY + radius * Math.sin(angle) - height / 2,
-      },
-    };
-  });
-
-  return {
-    nodes: resolveNodeOverlaps(layoutedNodes, LAYOUT_MODES.RADIAL),
-    edges,
-  };
-}
-
 export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) => {
-  if (layoutMode === LAYOUT_MODES.RADIAL) {
-    return layoutRadial(nodes, edges);
-  }
-
-  const spacing = computeGraphSpacing(nodes);
+  const spacing = computeGraphSpacing(nodes, layoutMode);
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   const rankdir = layoutMode === LAYOUT_MODES.LR ? 'LR' : 'TB';
-  dagreGraph.setGraph({
+  const graphOpts = {
     rankdir,
     nodesep: spacing.nodesep,
     ranksep: spacing.ranksep,
-    marginx: 48,
-    marginy: 48,
-    ranker: 'network-simplex',
-  });
+    marginx: layoutMode === LAYOUT_MODES.LR ? 32 : 48,
+    marginy: layoutMode === LAYOUT_MODES.LR ? 64 : 48,
+    ranker: layoutMode === LAYOUT_MODES.LR ? 'tight-tree' : 'network-simplex',
+    align: layoutMode === LAYOUT_MODES.LR ? 'UL' : undefined,
+  };
+  dagreGraph.setGraph(graphOpts);
 
   nodes.forEach((node) => {
     if (!node.hidden) {
@@ -410,9 +494,15 @@ export const getLayoutedElements = (nodes, edges, layoutMode = LAYOUT_MODES.TB) 
   });
 
   layoutedNodes = tightenRankSpacing(layoutedNodes, layoutMode, rankByNodeId);
+  if (layoutMode === LAYOUT_MODES.LR) {
+    layoutedNodes = tightenColumnSpacing(layoutedNodes, rankByNodeId);
+  }
   layoutedNodes = resolveNodeOverlaps(layoutedNodes, layoutMode, rankByNodeId);
 
-  return { nodes: layoutedNodes, edges };
+  return {
+    nodes: applyLayoutHandlePositions(layoutedNodes, layoutMode),
+    edges,
+  };
 };
 
 export const styleApiEdges = (edges) =>
@@ -420,7 +510,7 @@ export const styleApiEdges = (edges) =>
     ...edge,
     type: 'default',
     animated: false,
-    style: { stroke: '#94a3b8', strokeWidth: 2, transition: 'all 0.3s ease' },
+    style: { stroke: theme.edgeStroke, strokeWidth: 2, transition: 'all 0.3s ease' },
   }));
 
 export const initializeApiNodes = (nodes) =>

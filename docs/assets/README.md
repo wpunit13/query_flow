@@ -4,9 +4,11 @@ Animated demos for the main [readme.md](../readme.md). Files here are **screen c
 
 ## Files
 
-| `demo-overview.gif` | Paste SQL → Render DAG → explore lineage graph (**commit to git**) |
+| `demo-overview.gif` | Complex SQL → Render → LR layout → Table peek → graph selection (**commit to git**) |
 | `demo-column-trace.gif` | Expand node → trace a column upstream (**commit to git**) |
-| `demo-overview.webm` / `.mp4` | Local recorder output — **gitignored** (use GIF in README) |
+| `demo-table-view.gif` | Table view → Pipeline tab → stage detail (**commit to git**, shown in main README) |
+
+Scratch video from Playwright (`*.webm`, `page@*`) is deleted automatically after each run.
 
 ## Git policy
 
@@ -26,9 +28,9 @@ uvicorn main:app --port 8000
 # Terminal 2 — UI
 cd sql-visualizer-ui && npm run dev
 
-# Terminal 3 — record (installs Playwright once)
+# Terminal 3 — record (installs Playwright + Chromium once, ~100MB cache in scripts/.playwright-browsers/)
 cd scripts && npm install && npx playwright install chromium
-node record-demo.mjs
+npm run record
 ```
 
 Output is written to this folder (`docs/assets/`).
@@ -48,11 +50,7 @@ ffmpeg -i recording.mov -vf "fps=12,scale=1280:-1:flags=lanczos,split[s0][s1];[s
 ## README embed
 
 ```markdown
-![Demo — render and explore](docs/assets/demo-overview.gif)
-```
-
-Or video:
-
-```markdown
-<video src="docs/assets/demo-overview.mp4" autoplay loop muted playsinline width="100%"></video>
+![Demo — overview](docs/assets/demo-overview.gif)
+![Demo — column trace](docs/assets/demo-column-trace.gif)
+![Demo — table view](docs/assets/demo-table-view.gif)
 ```

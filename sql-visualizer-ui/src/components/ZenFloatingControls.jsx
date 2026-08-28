@@ -1,10 +1,13 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { toolbarButtonStyle, primaryButtonStyle } from '../theme/uiStyles';
 
 export default function ZenFloatingControls({
   onFitView,
   onToggleZen,
   onEnterAuthor,
 }) {
+  const { theme } = useTheme();
+
   return (
     <div
       style={{
@@ -14,17 +17,17 @@ export default function ZenFloatingControls({
         zIndex: 10,
         display: 'flex',
         gap: '6px',
-        background: 'white',
+        background: theme.cardBg,
         padding: '6px',
         borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        boxShadow: theme.shadowMenu,
         border: `1px solid ${theme.border}`,
       }}
     >
       <button
         type="button"
         onClick={onFitView}
-        style={btnStyle()}
+        style={toolbarButtonStyle(theme, false)}
         title="Fit view (F)"
       >
         Fit
@@ -32,7 +35,7 @@ export default function ZenFloatingControls({
       <button
         type="button"
         onClick={onEnterAuthor}
-        style={btnStyle()}
+        style={toolbarButtonStyle(theme, false)}
         title="Edit SQL (E)"
       >
         Edit
@@ -40,24 +43,15 @@ export default function ZenFloatingControls({
       <button
         type="button"
         onClick={onToggleZen}
-        style={{ ...btnStyle(), background: theme.primary, color: 'white', border: 'none' }}
+        style={{
+          ...primaryButtonStyle(theme),
+          padding: '6px 10px',
+          fontSize: '11px',
+        }}
         title="Exit zen (Z or Esc)"
       >
         Exit Zen
       </button>
     </div>
   );
-}
-
-function btnStyle() {
-  return {
-    padding: '6px 10px',
-    fontSize: '11px',
-    fontWeight: '600',
-    border: `1px solid ${theme.border}`,
-    borderRadius: '6px',
-    background: 'white',
-    color: theme.textMain,
-    cursor: 'pointer',
-  };
 }

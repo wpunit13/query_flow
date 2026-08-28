@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { theme } from './theme';
+import { useTheme } from './context/ThemeContext';
 import { useGraphLayout } from './hooks/useGraphLayout';
 import { useLineageGraph } from './hooks/useLineageGraph';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -15,6 +15,7 @@ import { LAYOUT_MODES } from './utils/dagreLayout';
 import { VIEW_MODES } from './utils/lineageTableModel';
 
 export default function App() {
+  const { theme } = useTheme();
   const embedOptions = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const sqlParam = params.get('sql');
@@ -39,7 +40,6 @@ export default function App() {
     onFocusDownstream: graph.handleFocusDownstream,
     onLayoutTB: () => graph.handleLayoutChange(LAYOUT_MODES.TB),
     onLayoutLR: () => graph.handleLayoutChange(LAYOUT_MODES.LR),
-    onLayoutRadial: () => graph.handleLayoutChange(LAYOUT_MODES.RADIAL),
     onToggleDiff: () => graph.setShowShortcuts(true),
     onToggleStudioMode: graph.handleToggleStudioMode,
     onToggleZen: graph.handleToggleZen,
@@ -80,7 +80,7 @@ export default function App() {
           flexDirection: 'column',
           padding: shellPadding,
           fontFamily: '"Inter", sans-serif',
-          background: '#f1f5f9',
+          background: theme.shellBg,
         }}
       >
         {!graph.embedMode && (
@@ -163,6 +163,7 @@ export default function App() {
                 selectedNodeId={graph.selectedNodeId}
                 nodes={graph.baseNodes}
                 edges={graph.baseEdges}
+                onClear={graph.clearTableSelection}
               />
             </>
           )}
@@ -179,7 +180,7 @@ export default function App() {
               onToggleShowAllOperations={graph.handleToggleShowAllOperations}
               onNodeSelect={graph.selectNodeById}
               onColumnSelect={graph.onColumnSelect}
-              onStageExpand={graph.handleStageExpand}
+              onClearSelection={graph.clearTableSelection}
             />
           ) : (
             <GraphCanvas

@@ -4,9 +4,12 @@ import { EyeIcon, EyeOffIcon } from '../../icons';
 import { toggleNodeCollapse } from '../../utils/graphVisibility';
 import { useGraphActions } from '../../context/GraphActionsContext';
 
-const unionColor = '#6366f1';
-
-export default function UnionNode({ id, data }) {
+export default function UnionNode({
+  id,
+  data,
+  sourcePosition = Position.Bottom,
+  targetPosition = Position.Top,
+}) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
 
@@ -21,12 +24,12 @@ export default function UnionNode({ id, data }) {
     <div
       style={{
         background: theme.cardBg,
-        border: `2px solid ${isHighlighted ? theme.highlight : unionColor}`,
+        border: `2px solid ${isHighlighted ? theme.highlight : theme.unionBg}`,
         borderRadius: expanded ? '8px' : '20px',
         minWidth: expanded ? '200px' : 'auto',
         boxShadow: isHighlighted
           ? `0 0 15px ${theme.highlight}`
-          : '0 2px 4px rgb(0 0 0 / 0.05)',
+          : theme.shadowSubtle,
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.2s ease',
         display: 'flex',
@@ -35,13 +38,13 @@ export default function UnionNode({ id, data }) {
         zIndex: expanded ? 6 : 2,
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <Handle type="target" position={targetPosition} style={{ opacity: 0 }} />
 
       <div
         style={{
           padding: '6px 12px',
           background: theme.cardBg,
-          color: unionColor,
+          color: theme.unionBg,
           fontSize: '11px',
           fontWeight: '700',
           display: 'flex',
@@ -84,8 +87,8 @@ export default function UnionNode({ id, data }) {
             }}
             style={{
               cursor: 'pointer',
-              backgroundColor: data.collapsed ? unionColor : 'rgba(99, 102, 241, 0.15)',
-              color: data.collapsed ? 'white' : unionColor,
+              backgroundColor: data.collapsed ? theme.unionBg : theme.unionSurface,
+              color: data.collapsed ? theme.cardBg : theme.unionBg,
               border: 'none',
               borderRadius: '50%',
               width: '24px',
@@ -105,10 +108,10 @@ export default function UnionNode({ id, data }) {
         <div
           style={{
             padding: '8px 12px',
-            background: '#eef2ff',
-            color: '#4338ca',
+            background: theme.unionSurface,
+            color: theme.unionText,
             fontSize: '11px',
-            borderTop: `1px solid ${unionColor}40`,
+            borderTop: `1px solid ${theme.unionBg}40`,
           }}
         >
           {branches.map((branch) => (
@@ -119,7 +122,7 @@ export default function UnionNode({ id, data }) {
         </div>
       )}
 
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+      <Handle type="source" position={sourcePosition} style={{ opacity: 0 }} />
     </div>
   );
 }

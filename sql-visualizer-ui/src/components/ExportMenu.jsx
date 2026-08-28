@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { toolbarButtonStyle } from '../theme/uiStyles';
 
 export default function ExportMenu({
   disabled,
@@ -10,6 +11,7 @@ export default function ExportMenu({
   onExportCsv,
   onExportOpenLineage,
 }) {
+  const { theme } = useTheme();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const menuRef = useRef(null);
@@ -42,7 +44,7 @@ export default function ExportMenu({
     textAlign: 'left',
     padding: '8px 12px',
     border: 'none',
-    background: 'white',
+    background: theme.cardBg,
     fontSize: '12px',
     cursor: disabled || busy ? 'not-allowed' : 'pointer',
     color: theme.textMain,
@@ -55,14 +57,7 @@ export default function ExportMenu({
         disabled={disabled || busy}
         onClick={() => setOpen((v) => !v)}
         style={{
-          padding: '6px 10px',
-          fontSize: '11px',
-          fontWeight: '600',
-          border: `1px solid ${theme.border}`,
-          borderRadius: '6px',
-          background: open ? '#eff6ff' : 'white',
-          color: theme.textMain,
-          cursor: disabled || busy ? 'not-allowed' : 'pointer',
+          ...toolbarButtonStyle(theme, open),
           opacity: disabled ? 0.5 : 1,
         }}
         title="Export graph or lineage data"
@@ -77,10 +72,10 @@ export default function ExportMenu({
             right: 0,
             marginTop: '4px',
             minWidth: '200px',
-            background: 'white',
+            background: theme.cardBg,
             border: `1px solid ${theme.border}`,
             borderRadius: '8px',
-            boxShadow: '0 8px 24px rgb(0 0 0 / 0.12)',
+            boxShadow: theme.shadowMenu,
             zIndex: 20,
             overflow: 'hidden',
           }}

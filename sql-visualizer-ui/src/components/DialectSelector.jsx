@@ -1,4 +1,5 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { inputFieldStyle, toolbarButtonStyle } from '../theme/uiStyles';
 
 export default function DialectSelector({
   dialect,
@@ -8,6 +9,7 @@ export default function DialectSelector({
   detecting,
   detectHint,
 }) {
+  const { theme } = useTheme();
   const selected = dialects.find((d) => d.id === dialect);
 
   return (
@@ -26,12 +28,7 @@ export default function DialectSelector({
         value={dialect}
         onChange={(e) => onDialectChange(e.target.value)}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${theme.border}`,
-          borderRadius: '6px',
-          fontSize: '12px',
-          background: 'white',
-          color: theme.textMain,
+          ...inputFieldStyle(theme),
           minWidth: '130px',
         }}
         title={selected?.limitations || ''}
@@ -47,15 +44,8 @@ export default function DialectSelector({
         onClick={onDetectDialect}
         disabled={detecting}
         style={{
-          padding: '6px 10px',
+          ...toolbarButtonStyle(theme, false, detecting),
           fontSize: '11px',
-          fontWeight: '600',
-          border: `1px solid ${theme.border}`,
-          borderRadius: '6px',
-          background: 'white',
-          color: theme.textMain,
-          cursor: detecting ? 'default' : 'pointer',
-          whiteSpace: 'nowrap',
         }}
         title="Guess dialect from SQL keywords (heuristic)"
       >

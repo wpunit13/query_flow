@@ -10,6 +10,8 @@ import {
   LAYOUT_MODES,
   applyVisibilityFilter,
   ensureNodePositions,
+  adjustLayoutForExpandedToggle,
+  getDownstreamNodeIds,
 } from '../utils/dagreLayout';
 import { getConnectedElements } from '../utils/graphVisibility';
 import {
@@ -56,23 +58,17 @@ const STAGE_KINDS = new Set([
 const DEFAULT_SQL =
   'WITH cte1 AS (SELECT id, name FROM users JOIN orders ON users.id = orders.user_id) SELECT id FROM cte1';
 
-const HIGHLIGHT_EDGE_STYLE = {
-  stroke: theme.primary,
-  strokeWidth: 3,
-  opacity: 1,
-};
+function getHighlightEdgeStyle() {
+  return { stroke: theme.primary, strokeWidth: 3, opacity: 1 };
+}
 
-const DIM_EDGE_STYLE = {
-  stroke: '#e2e8f0',
-  strokeWidth: 1,
-  opacity: 0.2,
-};
+function getDimEdgeStyle() {
+  return { stroke: theme.edgeStroke, strokeWidth: 1, opacity: 0.25 };
+}
 
-const DEFAULT_EDGE_STYLE = {
-  stroke: '#94a3b8',
-  strokeWidth: 2,
-  opacity: 1,
-};
+function getDefaultEdgeStyle() {
+  return { stroke: theme.edgeStroke, strokeWidth: 2, opacity: 1 };
+}
 
 const FALLBACK_DIALECTS = [
   { id: 'bigquery', label: 'BigQuery', limitations: '' },
@@ -237,7 +233,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
           animated: highlightEdges.has(e.id),
           style: {
             ...e.style,
-            ...(highlightEdges.has(e.id) ? HIGHLIGHT_EDGE_STYLE : DIM_EDGE_STYLE),
+            ...(highlightEdges.has(e.id) ? getHighlightEdgeStyle() : getDimEdgeStyle()),
           },
         }))
       );
@@ -262,7 +258,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
       eds.map((e) => ({
         ...e,
         animated: false,
-        style: { ...e.style, ...DEFAULT_EDGE_STYLE },
+        style: { ...e.style, ...getDefaultEdgeStyle() },
       }))
     );
   }, [setNodes, setEdges]);
@@ -453,7 +449,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
       ...e,
       hidden: false,
       animated: false,
-      style: { ...DEFAULT_EDGE_STYLE, transition: 'all 0.3s ease' },
+      style: { ...getDefaultEdgeStyle(), transition: 'all 0.3s ease' },
     }));
 
     const laidOut = layoutFullGraph(resetNodes, resetEdges, layoutMode);
@@ -661,9 +657,14 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedColumn(null);
+    setExpandedStageId(null);
     setBreadcrumb([]);
     clearHighlight();
   }, [clearHighlight]);
+
+  const clearTableSelection = useCallback(() => {
+    onPaneClick();
+  }, [onPaneClick]);
 
   const handleStageExpand = useCallback((stageId) => {
     setExpandedStageId(stageId);
@@ -718,14 +719,10 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const onNodeExpandedToggle = useCallback(
     (nodeId) => {
       if (!baseNodes.length) return;
-      const toggledNodes = baseNodes.map((n) =>
-        n.id === nodeId
-          ? { ...n, data: { ...n.data, expanded: !n.data?.expanded } }
-          : n
-      );
-      const { nodes: layoutedNodes } = getLayoutedElements(
-        toggledNodes,
+      const layoutedNodes = adjustLayoutForExpandedToggle(
+        baseNodes,
         baseEdges,
+        nodeId,
         layoutMode
       );
       setBaseNodes(layoutedNodes);
@@ -735,6 +732,9 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
       });
       setTimeout(() => {
         rfInstance?.updateNodeInternals?.(nodeId);
+        getDownstreamNodeIds(nodeId, baseEdges).forEach((id) => {
+          rfInstance?.updateNodeInternals?.(id);
+        });
       }, 50);
     },
     [
@@ -908,6 +908,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     tableTab,
     setTableTab,
     expandedStageId,
+    clearTableSelection,
     handleStageExpand,
     showAllOperations,
     handleToggleShowAllOperations,

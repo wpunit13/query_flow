@@ -1,18 +1,11 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
 import { getColumnTraceSummary } from '../utils/lineagePath';
+import { chipStyle } from '../theme/uiStyles';
 
 function Chip({ children, accent }) {
+  const { theme } = useTheme();
   return (
-    <span
-      style={{
-        padding: '2px 8px',
-        borderRadius: '4px',
-        background: accent ? '#eff6ff' : theme.cardBg,
-        border: `1px solid ${accent ? theme.primary : theme.border}`,
-        color: accent ? theme.primary : theme.textMain,
-        fontWeight: accent ? '600' : '500',
-      }}
-    >
+    <span style={chipStyle(theme, accent)}>
       {children}
     </span>
   );
@@ -24,7 +17,38 @@ export default function BreadcrumbBar({
   selectedNodeId,
   nodes,
   edges,
+  onClear,
 }) {
+  const { theme } = useTheme();
+
+  const barStyle = {
+    padding: '8px 12px',
+    background: theme.headerBg,
+    borderBottom: `1px solid ${theme.border}`,
+    fontSize: '12px',
+    color: theme.textMuted,
+  };
+
+  const clearButton = onClear ? (
+    <button
+      type="button"
+      onClick={onClear}
+      style={{
+        marginLeft: 'auto',
+        fontSize: '11px',
+        padding: '4px 10px',
+        border: `1px solid ${theme.border}`,
+        borderRadius: '6px',
+        background: theme.buttonBg,
+        color: theme.textMuted,
+        cursor: 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      Clear
+    </button>
+  ) : null;
+
   if (selectedColumn && selectedNodeId && nodes?.length) {
     const trace = getColumnTraceSummary(
       selectedNodeId,
@@ -34,20 +58,13 @@ export default function BreadcrumbBar({
     );
 
     return (
-      <div
-        style={{
-          padding: '8px 12px',
-          background: '#f8fafc',
-          borderBottom: `1px solid ${theme.border}`,
-          fontSize: '12px',
-          color: theme.textMuted,
-        }}
-      >
+      <div style={barStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: '600', color: theme.textMain }}>Column trace</span>
           <Chip accent>{trace.columnName}</Chip>
           <span>in</span>
           <Chip>{trace.outputLabel}</Chip>
+          {clearButton}
         </div>
 
         {trace.pipelineStages.length > 0 && (
@@ -130,14 +147,10 @@ export default function BreadcrumbBar({
   return (
     <div
       style={{
+        ...barStyle,
         display: 'flex',
         alignItems: 'center',
         gap: '6px',
-        padding: '8px 12px',
-        background: '#f8fafc',
-        borderBottom: `1px solid ${theme.border}`,
-        fontSize: '12px',
-        color: theme.textMuted,
         flexWrap: 'wrap',
       }}
     >
@@ -155,6 +168,7 @@ export default function BreadcrumbBar({
           </span>
         </span>
       ))}
+      {clearButton}
     </div>
   );
 }
