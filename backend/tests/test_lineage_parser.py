@@ -7,6 +7,8 @@ from backend.services.lineage_parser import parse_sql_to_lineage
 
 
 NOTWORKING_SQL = Path(__file__).resolve().parent / "fixtures" / "notworking.sql"
+LARGE_MULTIFEATURE_SQL = Path(__file__).resolve().parent / "fixtures" / "large_multifeature.sql"
+OVERVIEW_NODE_THRESHOLD = 40
 
 
 def _node(result, node_id):
@@ -51,6 +53,16 @@ def test_notworking_sql_file():
     assert result["version"] == "1.0"
     assert "stats" in result
     assert result["stats"]["node_count"] == len(result["nodes"])
+    assert any("LATERAL" in w for w in result["warnings"])
+
+
+def test_large_multifeature_sql_file():
+    sql = LARGE_MULTIFEATURE_SQL.read_text()
+    result = parse_sql_to_lineage(sql)
+    assert result["stats"]["node_count"] >= OVERVIEW_NODE_THRESHOLD
+    assert result["stats"]["node_count"] == len(result["nodes"])
+    assert any(n["type"] == "unionNode" for n in result["nodes"])
+    assert sum(1 for n in result["nodes"] if n["type"] == "joinNode") >= 10
     assert any("LATERAL" in w for w in result["warnings"])
 
 

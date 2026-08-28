@@ -44,7 +44,12 @@ import {
   getDefaultTableTab,
   VIEW_MODES,
   TABLE_TABS,
+  isPipelineQuery,
 } from '../utils/lineageTableModel';
+import {
+  isLargeLineageGraph,
+  buildOverviewToastMessage,
+} from '../constants/overviewMode';
 
 const STAGE_KINDS = new Set([
   'cte',
@@ -117,6 +122,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const [tableTab, setTableTab] = useState(TABLE_TABS.SOURCES);
   const [expandedStageId, setExpandedStageId] = useState(null);
   const [showAllOperations, setShowAllOperations] = useState(false);
+  const [overviewToast, setOverviewToast] = useState(null);
 
   const [lastParseResult, setLastParseResult] = useState(null);
   const embedBootstrapped = useRef(false);
@@ -290,6 +296,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     setFocusMode(null);
     setExpandedStageId(null);
     setShowAllOperations(false);
+    setOverviewToast(null);
 
     try {
       const data = await parseSql(sqlToParse, dialect);
@@ -338,7 +345,25 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
           style: { opacity: 1, transition: 'opacity 0.3s ease' },
         }))
       );
-      fitGraphToView();
+
+      const nodeCount = data.stats?.node_count ?? initializedNodes.length;
+      const edgeCount = data.stats?.edge_count ?? styledEdges.length;
+      const useTableOverview = isLargeLineageGraph(nodeCount);
+
+      if (useTableOverview) {
+        setViewMode(VIEW_MODES.TABLE);
+        setTableTab(
+          isPipelineQuery(initializedNodes)
+            ? TABLE_TABS.PIPELINE
+            : getDefaultTableTab(initializedNodes)
+        );
+        setOverviewToast(buildOverviewToastMessage(nodeCount, edgeCount));
+      } else {
+        setViewMode(VIEW_MODES.GRAPH);
+        setOverviewToast(null);
+        fitGraphToView();
+      }
+
       setLastParsedSql(sqlToParse);
       setExpandedStageId(getDefaultExpandedStageId(initializedNodes));
       setTableTab(getDefaultTableTab(initializedNodes));
@@ -429,6 +454,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     setTableTab(TABLE_TABS.SOURCES);
     setExpandedStageId(null);
     setShowAllOperations(false);
+    setOverviewToast(null);
     if (diffMode) setBaselineGraph(null);
 
     const resetNodes = baseNodes.map((n) => ({
@@ -912,6 +938,8 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     handleStageExpand,
     showAllOperations,
     handleToggleShowAllOperations,
+    overviewToast,
+    dismissOverviewToast: () => setOverviewToast(null),
     selectNodeById,
     baseNodes,
     baseEdges,

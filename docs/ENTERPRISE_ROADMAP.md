@@ -10,6 +10,8 @@ Track implementation progress for enterprise readiness items (from review point 
 
 **Still open (highest impact):** catalog integration (§5), workspaces/versioning (§7), auth + rate limits (P0), observability metrics (§10), K8s Helm, CI pipeline, dependency pinning.
 
+**Large graph UI:** Queries with **≥ 40 nodes** default to Table / Pipeline after render, with an overview toast. Select a stage, then Graph (`G`) to trace on the canvas.
+
 ---
 
 ## 4. Lineage Accuracy Limitationsmo
@@ -178,6 +180,7 @@ Dialect is currently hardcoded to `bigquery` in the UI.
 - [x] Light / dark theme with `localStorage` persistence
 - [x] Long labels: ellipsis + hover tooltip (copy, node kind)
 - [x] Layout polish: overlap resolution, top-anchored expand, LR column spacing, LR left/right edge handles
+- [x] Large-graph overview: default to Table / Pipeline when node count ≥ 40, with toast
 
 ---
 

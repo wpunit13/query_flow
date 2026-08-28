@@ -10,6 +10,7 @@ import GraphToolbar from './components/GraphToolbar';
 import LineageTableView from './components/LineageTableView';
 import BreadcrumbBar from './components/BreadcrumbBar';
 import ShortcutsModal from './components/ShortcutsModal';
+import OverviewToast from './components/OverviewToast';
 import ZenFloatingControls from './components/ZenFloatingControls';
 import { LAYOUT_MODES } from './utils/dagreLayout';
 import { VIEW_MODES } from './utils/lineageTableModel';
@@ -205,6 +206,10 @@ export default function App() {
         <ShortcutsModal
           open={graph.showShortcuts}
           onClose={() => graph.setShowShortcuts(false)}
+        />
+        <OverviewToast
+          message={graph.overviewToast}
+          onDismiss={graph.dismissOverviewToast}
         />
       </div>
     </GraphActionsContext.Provider>
