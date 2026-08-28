@@ -270,7 +270,26 @@ async function ensureFlatGraph(page) {
   return (await pipelineBtn.count()) === 0;
 }
 
-/** Column trace on output / stage with expandable columns */
+/** Final output table node — do not filter on "(N cols)" (hidden when expanded). */
+function finalOutputGraphNode(page) {
+  return page
+    .locator('.react-flow__node')
+    .filter({ hasText: /Final View Output|Final_Output/i })
+    .first();
+}
+
+async function expandTableNodeColumns(page, nodeLocator) {
+  const expandToggle = nodeLocator.getByText('▼', { exact: true });
+  if (await expandToggle.count() > 0) {
+    await expandToggle.click({ force: true });
+    await sleep(900);
+    return true;
+  }
+  const collapseToggle = nodeLocator.getByText('▲', { exact: true });
+  return (await collapseToggle.count()) > 0;
+}
+
+/** Column trace on output — expand Final Output, click column, show upstream highlight */
 async function recordColumnTrace(page) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await prepareRecordingPage(page);
@@ -283,53 +302,34 @@ async function recordColumnTrace(page) {
 
   const frames = await captureFrames(page, 4, 200);
 
-  const targetNode = page
-    .locator('.react-flow__node')
-    .filter({ hasText: /Final View Output|Final_Output/i })
-    .filter({ hasText: /\(\d+ cols\)/ })
+  const targetNode = finalOutputGraphNode(page);
+  if (await targetNode.count() === 0) {
+    console.warn('demo-column-trace: Final Output node not found');
+    return;
+  }
+
+  await targetNode.scrollIntoViewIfNeeded();
+  await expandTableNodeColumns(page, targetNode);
+
+  const expandedNode = finalOutputGraphNode(page);
+  const colRow = expandedNode
+    .locator('div')
+    .filter({ hasText: /department_path/i })
     .first();
 
-  if (await targetNode.count() > 0) {
-    await targetNode.scrollIntoViewIfNeeded();
-    await targetNode.click();
-    await sleep(600);
-
-    let trace = targetNode.locator('span').filter({ hasText: /^trace$/i }).first();
-    if ((await trace.count()) === 0) {
-      const expandToggle = targetNode.getByText('▼', { exact: true });
-      if (await expandToggle.count() > 0) {
-        await expandToggle.click();
-        await sleep(500);
-      }
-      trace = targetNode.locator('span').filter({ hasText: /^trace$/i }).first();
-    }
-
-    if (await trace.count() > 0) {
-      await trace.click({ force: true });
-      frames.push(...await captureFrames(page, 10, 250));
-    } else {
-      const colCell = targetNode
-        .locator('div')
-        .filter({ hasText: /department_path/i })
-        .first();
-      if (await colCell.count() > 0) {
-        await colCell.click({ force: true });
-        frames.push(...await captureFrames(page, 10, 250));
-      } else {
-        console.warn('demo-column-trace: expanded node but no trace link found');
-      }
-    }
-  } else {
-    console.warn('demo-column-trace: no Final Output table node with columns found');
+  if (await colRow.count() === 0) {
+    console.warn('demo-column-trace: department_path column row not found after expand');
+    return;
   }
 
-  if (frames.length > 6) {
-    const out = resolve(ASSETS, 'demo-column-trace.gif');
-    const meta = pngBuffersToGif(frames, out, 130);
-    console.log(`Wrote ${out} (${meta.width}x${meta.height}, ${meta.frames} frames)`);
-  } else {
-    console.log('Skipped demo-column-trace.gif (no expandable columns / trace control found)');
-  }
+  await colRow.click({ force: true });
+  await sleep(400);
+  await fitGraph(page);
+  frames.push(...await captureFrames(page, 12, 280));
+
+  const out = resolve(ASSETS, 'demo-column-trace.gif');
+  const meta = pngBuffersToGif(frames, out, 130);
+  console.log(`Wrote ${out} (${meta.width}x${meta.height}, ${meta.frames} frames)`);
 }
 
 /** Table view: pipeline stages + stage detail panel */
@@ -401,7 +401,7 @@ async function ensurePipelineStageGraph(page) {
   return false;
 }
 
-/** Pipeline stage graph: macro stage boxes, expand internals, selection highlight */
+/** Pipeline stage graph + full graph toggle, expand stage, path highlight */
 async function recordPipelineStages(page) {
   await page.setViewportSize({ width: 1280, height: 720 });
   await prepareRecordingPage(page);
@@ -431,7 +431,7 @@ async function recordPipelineStages(page) {
     await expandBtn.click();
     await sleep(900);
     await fitGraph(page);
-    frames.push(...await captureFrames(page, 8, 250));
+    frames.push(...await captureFrames(page, 6, 250));
   }
 
   const stageNode = page.locator('.react-flow__node').filter({
@@ -439,7 +439,29 @@ async function recordPipelineStages(page) {
   }).first();
   if (await stageNode.count() > 0) {
     await stageNode.click();
+    frames.push(...await captureFrames(page, 5, 220));
+  }
+
+  const fullGraphBtn = page.getByRole('button', { name: /^Full graph$/i });
+  if (await fullGraphBtn.count() > 0) {
+    await fullGraphBtn.click();
+    await sleep(1000);
+    await fitGraph(page);
     frames.push(...await captureFrames(page, 6, 220));
+
+    const flatNode = page.locator('.react-flow__node').nth(2);
+    if (await flatNode.count() > 0) {
+      await flatNode.click();
+      frames.push(...await captureFrames(page, 4, 200));
+    }
+
+    const pipelineBtn = page.getByRole('button', { name: /^Pipeline stages$/i });
+    if (await pipelineBtn.count() > 0) {
+      await pipelineBtn.click();
+      await sleep(900);
+      await fitGraph(page);
+      frames.push(...await captureFrames(page, 5, 220));
+    }
   }
 
   const out = resolve(ASSETS, 'demo-pipeline-stages.gif');

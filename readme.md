@@ -33,11 +33,11 @@ Open **Table** view, use the **Pipeline** tab, select a stage row, and inspect s
 
 ![Table view — Pipeline tab and stage detail panel](docs/assets/demo-table-view.gif)
 
-### Graph — pipeline stage boxes
+### Graph — pipeline stages and full graph
 
-Macro **Pipeline stages** graph view: one box per CTE/stage, **Expand** for joins and tables inside, click a stage for path highlight. Recorded automatically via `npm run record` using `large_multifeature.sql` (65-node pipeline).
+Macro **Pipeline stages** view (stage boxes, expand internals, path highlight), then toggle **Full graph** for the flat DAG, and switch back to pipeline stages. Recorded with `large_multifeature.sql` (65-node pipeline).
 
-![Pipeline stage graph — stage boxes, expand internals, path highlight](docs/assets/demo-pipeline-stages.gif)
+![Pipeline stage graph — stages view, full graph toggle, path highlight](docs/assets/demo-pipeline-stages.gif)
 
 ---
 

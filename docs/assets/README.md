@@ -9,7 +9,7 @@ Animated demos for the main [readme.md](../readme.md). Files here are **screen c
 | `demo-overview.gif` | Parse → TB/LR layout → Table/Pipeline peek → graph node selection | `notworking.sql` |
 | `demo-column-trace.gif` | Expand node → **trace** column → upstream highlight on graph | `notworking.sql` |
 | `demo-table-view.gif` | **Table** view → **Pipeline** tab → stage row → detail panel | `notworking.sql` |
-| `demo-pipeline-stages.gif` | Graph **Pipeline stages** → expand stage → path highlight | `large_multifeature.sql` |
+| `demo-pipeline-stages.gif` | **Pipeline stages** → expand → highlight → **Full graph** → back to stages | `large_multifeature.sql` |
 
 All four GIFs are produced by a single run: `cd scripts && npm run record`.
 
