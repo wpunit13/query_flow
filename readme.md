@@ -48,51 +48,6 @@ Built for data engineers and analysts who need to debug long, production-grade q
 - **Diff mode** — Compare two renders of the same query; new nodes and edges highlighted in green.
 - **Reset canvas** — Restore full visibility, collapse state, and layout in one click.
 
-### Keyboard shortcuts
-
-| Key | Action |
-|-----|--------|
-| `/` | Focus search |
-| `F` | Fit graph to view |
-| `R` | Reset canvas |
-| `Esc` | Clear selection and focus |
-| `U` | Focus upstream of selected node |
-| `D` | Focus downstream of selected node |
-| `1` | Layout: top-to-bottom |
-| `2` | Layout: left-to-right |
-| `3` | Layout: radial |
-| `?` | Show shortcuts help |
-| `Enter` | Cycle search matches (in search box) |
-
----
-
-## Tech stack
-
-| Layer | Technologies |
-|-------|----------------|
-| **Frontend** | React 18, Vite, [@xyflow/react](https://reactflow.dev/), [dagre](https://github.com/dagrejs/dagre) |
-| **Backend** | Python 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [SQLGlot](https://github.com/tobymao/sqlglot), Pydantic |
-| **API** | REST `POST /api/parse-sql` — versioned JSON with nodes, edges, warnings, and column lineage |
-
-### Project structure
-
-```
-backend/
-  api/routes/lineage.py       # API routes
-  models/lineage.py           # Pydantic schemas
-  services/lineage_parser.py  # AST → graph
-  services/sql_preprocessor.py
-  tests/
-
-sql-visualizer-ui/
-  src/components/             # Graph canvas, toolbar, nodes
-  src/hooks/                  # Lineage graph & layout logic
-  src/utils/                  # Dagre layout, diff, path utilities
-  src/api/lineageClient.js
-
-main.py                       # FastAPI entrypoint
-```
-
 ---
 
 ## Getting started
@@ -144,13 +99,254 @@ pytest
 
 ---
 
-## Usage tips
+## User guide
 
-1. Paste SQL into the editor and click **Render DAG**.
-2. Use the **graph toolbar** for layout, branch filter, focus, and diff mode.
-3. Expand a node and click **trace** on a column for column-level lineage.
-4. Use **Hide** on a node to collapse upstream tables without moving the graph.
-5. Try `notworking.sql` in the repo for a stress test (recursive CTEs, lateral joins, `MERGE`, `ROLLUP`, etc.).
+This section explains how the UI behaves in practice — especially features that look similar but work differently.
+
+### UI layout
+
+| Area | What it controls |
+|------|------------------|
+| **Header** (top) | SQL editor, **Render DAG**, **Reset**, and **search** |
+| **Graph toolbar** (above canvas) | Layout, **Filter branch**, focus, diff mode |
+| **Canvas** | Interactive graph — pan, zoom, click nodes |
+| **Breadcrumb** (below toolbar) | Path to the selected node; shows `column: …` when tracing a column |
+
+After **Render DAG**, the graph is laid out automatically. Node positions stay stable when you hide branches or filter — the graph does not jump unless you change layout mode or render again.
+
+### Dialect selector
+
+Use the **Dialect** dropdown above the SQL editor before **Render DAG**. The choice is sent to the API on every parse (`read=` dialect for SQLGlot).
+
+| Dialect | Notes |
+|---------|--------|
+| **BigQuery** | Default; best for `QUALIFY`, `ARRAY`, `STRUCT`, GoogleSQL |
+| **Snowflake** | Snowflake functions and `QUALIFY` |
+| **PostgreSQL** | `::` casts, Postgres functions |
+| **Spark** | `LATERAL VIEW`, `EXPLODE` |
+| **Redshift** | Postgres-family; `DISTKEY` / `SORTKEY` hints |
+| **DuckDB** | `read_csv` / `read_parquet` style queries |
+
+**Detect** runs keyword heuristics on your SQL and suggests a dialect (with confidence and matched signals). It is a hint, not a guarantee — pick the engine you are actually targeting.
+
+Editor syntax highlighting uses the closest CodeMirror SQL dialect (BigQuery/Snowflake → standard SQL; Postgres/Redshift/DuckDB → PostgreSQL-style). Limitations per dialect are shown as the dropdown option tooltip from the API.
+
+---
+
+### Search vs Filter branch
+
+These are **two separate controls**. They are easy to confuse because both narrow what you see on the graph.
+
+#### Search (header — “Search table or column…”)
+
+- **Location:** Top bar, next to Reset / Render DAG. Press `/` to focus.
+- **Matches:**
+  - Node id, label, and qualified name (table/CTE names)
+  - **Column names** on any node
+  - Column lineage source references
+  - Join conditions on join nodes
+- **Behavior:**
+  - Matching nodes get an amber highlight and glow.
+  - Matching columns are highlighted when the node expands (matching nodes auto-expand).
+  - The graph shows matching nodes **plus their full upstream and downstream paths**.
+  - Pans to the first match as you type.
+  - Press **Enter** to cycle through matches (`1 / N` counter shown).
+- **Examples:** `project_name`, `project_id`, `clients`, `Aggregated`
+
+#### Filter branch (toolbar — “Filter branch…”)
+
+- **Location:** Graph toolbar, between layout buttons and ↑ Upstream / ↓ Downstream.
+- **Matches only node names** — **not** columns:
+  - Node `id` (e.g. `clients`, `AggregatedProjectAnalytics`)
+  - `label` (display name on the card)
+  - `qualified_name` (e.g. `schema.table` when the parser extracted it)
+- **Does not match:** column names, `INNER JOIN` text, SQL inside nodes.
+- **Behavior:**
+  - For each matching node, shows that node and **everything upstream and downstream** of it.
+  - Other nodes and edges are hidden (not deleted — still in the full graph).
+  - Does **not** relayout; positions stay the same.
+  - Red **No matches** if the text matches no node names (full graph stays visible).
+- **Examples that work:** `clients`, `time_sheets`, `Aggregated`
+- **Examples that do not work:** `project_id`, `project_name` (those are columns — use header search)
+
+| You type | Header search | Filter branch |
+|----------|---------------|---------------|
+| `clients` | Yes | Yes |
+| `project_id` | Yes (column) | No |
+| `INNER JOIN` | Maybe (conditions) | No |
+
+**Tip:** If header search is active, branch filter changes are ignored until you clear search.
+
+---
+
+### Selecting nodes and paths
+
+**Click a node** to select it:
+
+- Upstream and downstream paths are highlighted; other nodes dim.
+- The **breadcrumb** shows the longest upstream path to that node, e.g. `departments → join → RecursiveDepartmentHierarchy → …`.
+
+**↑ Upstream** / **↓ Downstream** (toolbar or `U` / `D`):
+
+- Requires a selected node.
+- **Upstream:** only nodes that feed into the selection (plus the selection).
+- **Downstream:** only nodes fed by the selection (plus the selection).
+- Stacks with **Filter branch** if both are active.
+- **Clear focus** or **Esc** restores normal view (branch filter still applies if set).
+
+---
+
+### Column trace
+
+1. Expand a node (▼ on the card).
+2. Click **trace** next to a column name.
+
+The UI highlights the upstream path for that column and marks likely source tables. The breadcrumb shows `column: <name>`. This is separate from search — it uses parsed column lineage from SQLGlot.
+
+---
+
+### Hide upstream (per node)
+
+Nodes with incoming edges show a **HIDE** button:
+
+- Hides upstream dependencies for **that node only** (collapse branch).
+- Does **not** relayout — the node stays where it is.
+- Click **HIDDEN** to show upstream again.
+
+Use this when a large source table clutters the view but you still want to see how a CTE or output is wired.
+
+---
+
+### Layout modes
+
+| Mode | Key | Best for |
+|------|-----|----------|
+| **↓ TB** | `1` | Default — vertical flow, reading top-to-bottom |
+| **→ LR** | `2` | Wide queries — horizontal flow |
+| **◎ Radial** | `3` | Overview — concentric rings |
+
+Changing layout **re-runs dagre** and may move nodes. Use **F** or **Reset** if the canvas feels off after a layout change.
+
+---
+
+### Diff mode (± Diff)
+
+Compare **two renders** of SQL and see **structural** changes to the lineage graph.
+
+#### How to use
+
+1. Turn on **± Diff** in the toolbar.
+2. Click **Render DAG** — this snapshot becomes the **baseline** (no green styling yet).
+3. Edit the SQL and click **Render DAG** again.
+4. New nodes and edges vs the baseline are highlighted in **green**.
+
+#### What is compared
+
+Comparison is by **node id** and **edge id** only:
+
+| Change | On canvas | In toolbar summary |
+|--------|-----------|-------------------|
+| **Added** node | Green border, glow, **NEW** badge | `+N nodes` |
+| **Added** edge | Green, thicker stroke | `+N` edges (in summary) |
+| **Removed** node/edge | Not drawn (current graph only) | `−N removed` |
+
+#### Limitations
+
+- **Renames** look like one node removed and one added (ids differ).
+- **Column-only changes** (e.g. add a column to `SELECT`) may show **no** green if node ids are unchanged.
+- Removed items are counted but not ghosted on the canvas.
+
+Turn **± Diff** off to clear the baseline. **Reset** also clears the baseline when diff mode is on.
+
+---
+
+### Reset vs Render DAG
+
+| Action | Effect |
+|--------|--------|
+| **Render DAG** | Parse current SQL, rebuild graph, apply layout |
+| **Reset** | Clear filters, focus, selection, collapse/hide state; relayout from stored base graph |
+
+Search query is cleared on **Render DAG**, not on **Reset** alone — use **R** for reset canvas behavior per shortcuts modal.
+
+---
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `/` | Focus header search |
+| `F` | Fit graph to view |
+| `R` | Reset canvas |
+| `Esc` | Clear selection and focus |
+| `U` | Focus upstream of selected node |
+| `D` | Focus downstream of selected node |
+| `1` | Layout: top-to-bottom |
+| `2` | Layout: left-to-right |
+| `3` | Layout: radial |
+| `?` | Show shortcuts help |
+| `Enter` | Cycle search matches (while search box is focused) |
+
+---
+
+### Parse warnings and errors
+
+**Warnings** (amber panel) — non-fatal issues from the preprocessor or parser (e.g. LATERAL normalized). The graph may still render; review before trusting lineage.
+
+**Errors** (red panel) — fatal parse failures. No graph update. Each error shows **Line / Col** from SQLGlot when available. **Click an error** to jump the editor cursor to that position. **Dismiss** clears the panel; editing SQL also clears errors.
+
+Invalid SQL example: `SELECT FROM` → click the error line to land on the typo.
+
+---
+
+### Quick workflow example
+
+1. Paste SQL → **Render DAG**.
+2. Type `clients` in **Filter branch** to see only paths involving that table.
+3. Clear filter → click **AggregatedProjectAnalytics** → press `U` to focus upstream.
+4. Expand the node → **trace** on `project_name` for column lineage.
+5. Type `project_name` in **header search** (not filter branch) to find all nodes with that column.
+6. Turn on **± Diff**, render, edit SQL, render again to see new tables/joins.
+
+Try `notworking.sql` in the repo for a stress test (recursive CTEs, lateral joins, `MERGE`, `ROLLUP`, etc.).
+
+---
+
+## Usage tips (quick reference)
+
+1. Paste SQL and click **Render DAG**.
+2. **Columns** → header search (`/`). **Table/CTE names** → Filter branch or search.
+3. **trace** on a column for lineage highlight; **Hide** on a node to collapse upstream clutter.
+4. **F** to fit large graphs; **R** to reset the canvas view.
+
+---
+
+## Tech stack
+
+| Layer | Technologies |
+|-------|----------------|
+| **Frontend** | React 18, Vite, [@xyflow/react](https://reactflow.dev/), [dagre](https://github.com/dagrejs/dagre) |
+| **Backend** | Python 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [SQLGlot](https://github.com/tobymao/sqlglot), Pydantic |
+| **API** | REST `POST /api/parse-sql` — versioned JSON with nodes, edges, warnings, and column lineage |
+
+### Project structure
+
+```
+backend/
+  api/routes/lineage.py       # API routes
+  models/lineage.py           # Pydantic schemas
+  services/lineage_parser.py  # AST → graph
+  services/sql_preprocessor.py
+  tests/
+
+sql-visualizer-ui/
+  src/components/             # Graph canvas, toolbar, nodes
+  src/hooks/                  # Lineage graph & layout logic
+  src/utils/                  # Dagre layout, diff, path utilities
+  src/api/lineageClient.js
+
+main.py                       # FastAPI entrypoint
+```
 
 ---
 

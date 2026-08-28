@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.routes.dialects import router as dialects_router
 from backend.api.routes.lineage import router as lineage_router
 
 
@@ -14,6 +15,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(lineage_router)
+    app.include_router(dialects_router)
     return app
 
 

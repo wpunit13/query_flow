@@ -59,11 +59,11 @@ Dialect is currently hardcoded to `bigquery` in the UI.
 
 ### Tasks
 
-- [ ] Dialect dropdown in UI (BigQuery, Snowflake, Postgres, Spark, Redshift, DuckDB)
-- [ ] Pass selected dialect to API on every parse request
-- [ ] Auto-detect dialect heuristics (optional helper)
-- [ ] Dialect-specific preprocessing rules where needed
-- [ ] Document supported dialects and known limitations per dialect
+- [x] Dialect dropdown in UI (BigQuery, Snowflake, Postgres, Spark, Redshift, DuckDB)
+- [x] Pass selected dialect to API on every parse request
+- [x] Auto-detect dialect heuristics (optional helper)
+- [x] Dialect-specific preprocessing rules where needed
+- [x] Document supported dialects and known limitations per dialect
 
 ---
 
@@ -235,15 +235,15 @@ Replace `alert()` and basic errors with production-grade feedback.
 
 ### Tasks
 
-- [ ] Inline error panel (replace `alert()`)
-- [ ] Show SQLGlot line/column in error messages
-- [ ] Click error → jump to line in SQL editor
-- [ ] Replace textarea with Monaco or CodeMirror editor
-- [ ] Syntax highlighting in SQL editor
-- [ ] Line numbers in SQL editor
-- [ ] Dialect-aware highlighting (where supported)
-- [ ] Warning panel for non-fatal parse issues (separate from errors)
-- [ ] Loading / parsing progress indicator for large queries
+- [x] Inline error panel (replace `alert()`)
+- [x] Show SQLGlot line/column in error messages
+- [x] Click error → jump to line in SQL editor
+- [x] Replace textarea with Monaco or CodeMirror editor
+- [x] Syntax highlighting in SQL editor
+- [x] Line numbers in SQL editor
+- [x] Dialect-aware highlighting (where supported)
+- [x] Warning panel for non-fatal parse issues (separate from errors)
+- [x] Loading / parsing progress indicator for large queries
 
 ---
 
@@ -312,11 +312,11 @@ Replace `alert()` and basic errors with production-grade feedback.
 
 ## Quick Wins (Optional — can parallelize with P0)
 
-- [x] Dialect dropdown + `VITE_API_URL` env var (env var only; dialect dropdown pending)
+- [x] Dialect dropdown + `VITE_API_URL` env var
 - [x] Pin `requirements.txt` and fix `package.json` deps (deps added; pinning pending)
 - [x] Delete commented-out code in `main.py` and `bkp_app_jsx`
 - [ ] Add `GET /health` and SQL size validation (e.g. max 500KB)
-- [ ] Replace `alert()` with inline error banner
+- [x] Replace `alert()` with inline error banner
 - [x] Add pytest cases using `notworking.sql` and simpler fixtures
 
 ---
@@ -325,6 +325,8 @@ Replace `alert()` and basic errors with production-grade feedback.
 
 | Date | Item | Notes |
 |---|---|---|
+| 2026-08-28 | Section 6 — Multi-dialect | Dialect selector, detect API, editor highlighting map |
+| 2026-08-28 | Section 13 — Error UX | CodeMirror editor, inline errors with line/col, jump-to-error, warning panel |
 | 2026-08-27 | Section 9 — Advanced graph UX | Layouts, filter, focus, breadcrumbs, shortcuts, diff, column trace |
 | 2026-08-27 | Section 4 — Lineage accuracy | Column lineage, node kinds, per-join nodes, DML support, warnings UI |
 | 2026-08-27 | Section 11 — Architecture refactor | Split backend + frontend monolith; 5 pytest tests passing |

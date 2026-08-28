@@ -1,9 +1,18 @@
 import { theme } from '../theme';
 import { ResetIcon, SearchIcon } from '../icons';
+import SqlEditor from './SqlEditor';
+import ParseFeedback from './ParseFeedback';
+import DialectSelector from './DialectSelector';
 
 export default function StudioHeader({
   sql,
   onSqlChange,
+  dialect,
+  dialects,
+  onDialectChange,
+  onDetectDialect,
+  detectingDialect,
+  detectHint,
   searchQuery,
   onSearchChange,
   onSearchKeyDown,
@@ -13,6 +22,10 @@ export default function StudioHeader({
   onParse,
   loading,
   warnings,
+  parseError,
+  onDismissError,
+  onJumpToError,
+  sqlEditorRef,
   searchInputRef,
 }) {
   return (
@@ -124,57 +137,74 @@ export default function StudioHeader({
             disabled={loading}
             style={{
               padding: '8px 24px',
-              backgroundColor: theme.primary,
+              backgroundColor: loading ? '#94a3b8' : theme.primary,
               color: 'white',
               border: 'none',
               borderRadius: '6px',
               fontWeight: '600',
-              cursor: 'pointer',
+              cursor: loading ? 'default' : 'pointer',
               whiteSpace: 'nowrap',
               height: '36px',
+              minWidth: '120px',
             }}
           >
-            {loading ? 'Analyzing...' : 'Render DAG'}
+            {loading ? 'Parsing…' : 'Render DAG'}
           </button>
         </div>
       </div>
 
-      {warnings.length > 0 && (
-        <div
-          style={{
-            padding: '10px 12px',
-            background: '#fffbeb',
-            border: '1px solid #fcd34d',
-            borderRadius: '6px',
-            fontSize: '12px',
-            color: '#92400e',
-          }}
-        >
-          <strong>Parse warnings ({warnings.length})</strong>
-          <ul style={{ margin: '6px 0 0', paddingLeft: '18px' }}>
-            {warnings.map((warning, idx) => (
-              <li key={idx} style={{ marginBottom: '4px' }}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <textarea
-        value={sql}
-        onChange={(e) => onSqlChange(e.target.value)}
-        rows={4}
-        style={{
-          width: '100%',
-          padding: '12px',
-          fontFamily: '"JetBrains Mono", monospace',
-          fontSize: '12px',
-          border: `1px solid ${theme.border}`,
-          borderRadius: '6px',
-          outline: 'none',
-          resize: 'vertical',
-          boxSizing: 'border-box',
-        }}
+      <DialectSelector
+        dialect={dialect}
+        dialects={dialects}
+        onDialectChange={onDialectChange}
+        onDetectDialect={onDetectDialect}
+        detecting={detectingDialect}
+        detectHint={detectHint}
       />
+
+      <ParseFeedback
+        parseError={parseError}
+        warnings={warnings}
+        onJumpToError={onJumpToError}
+        onDismissError={onDismissError}
+      />
+
+      <div style={{ position: 'relative' }}>
+        {loading && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '3px',
+              background: theme.headerBg,
+              borderRadius: '6px 6px 0 0',
+              overflow: 'hidden',
+              zIndex: 1,
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: '40%',
+                background: theme.primary,
+                animation: 'sqlParseProgress 1.2s ease-in-out infinite',
+              }}
+            />
+          </div>
+        )}
+        <SqlEditor ref={sqlEditorRef} value={sql} onChange={onSqlChange} dialect={dialect} />
+      </div>
+
+      <style>
+        {`
+          @keyframes sqlParseProgress {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+          }
+        `}
+      </style>
     </div>
   );
 }

@@ -59,6 +59,12 @@ export default function App() {
         <StudioHeader
           sql={graph.sql}
           onSqlChange={graph.setSql}
+          dialect={graph.dialect}
+          dialects={graph.dialects}
+          onDialectChange={graph.handleDialectChange}
+          onDetectDialect={graph.handleDetectDialect}
+          detectingDialect={graph.detectingDialect}
+          detectHint={graph.detectHint}
           searchQuery={graph.searchQuery}
           onSearchChange={graph.handleSearchChange}
           onSearchKeyDown={graph.handleSearchKeyDown}
@@ -68,6 +74,10 @@ export default function App() {
           onParse={graph.handleParseSql}
           loading={graph.loading}
           warnings={graph.warnings}
+          parseError={graph.parseError}
+          onDismissError={graph.handleDismissParseError}
+          onJumpToError={graph.handleJumpToError}
+          sqlEditorRef={graph.sqlEditorRef}
           searchInputRef={graph.searchInputRef}
         />
         <div

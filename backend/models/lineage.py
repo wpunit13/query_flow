@@ -45,3 +45,26 @@ class LineageResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     nodes: List[LineageNode]
     edges: List[LineageEdge]
+
+
+class ParseContextLine(BaseModel):
+    line: int
+    text: str
+    is_error_line: bool = False
+
+
+class ParseErrorItem(BaseModel):
+    message: str
+    line: Optional[int] = None
+    column: Optional[int] = None
+    highlight: Optional[str] = None
+    technical_message: Optional[str] = None
+    snippet: Optional[str] = None
+    context_lines: List[ParseContextLine] = Field(default_factory=list)
+
+
+class ParseErrorDetail(BaseModel):
+    error: str = "parse_error"
+    message: str
+    guidance: Optional[str] = None
+    errors: List[ParseErrorItem] = Field(default_factory=list)

@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNodesState, useEdgesState } from '@xyflow/react';
 import { parseSql } from '../api/lineageClient';
+import { DEFAULT_DIALECT, detectDialect, fetchDialects } from '../api/dialectClient';
 import { theme } from '../theme';
 import {
   getLayoutedElements,
@@ -47,6 +48,15 @@ const DEFAULT_EDGE_STYLE = {
   opacity: 1,
 };
 
+const FALLBACK_DIALECTS = [
+  { id: 'bigquery', label: 'BigQuery', limitations: '' },
+  { id: 'snowflake', label: 'Snowflake', limitations: '' },
+  { id: 'postgres', label: 'PostgreSQL', limitations: '' },
+  { id: 'spark', label: 'Spark', limitations: '' },
+  { id: 'redshift', label: 'Redshift', limitations: '' },
+  { id: 'duckdb', label: 'DuckDB', limitations: '' },
+];
+
 export function useLineageGraph(fitGraphToView) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -60,6 +70,11 @@ export function useLineageGraph(fitGraphToView) {
   const [searchIndex, setSearchIndex] = useState(0);
   const [rfInstance, setRfInstance] = useState(null);
   const [warnings, setWarnings] = useState([]);
+  const [parseError, setParseError] = useState(null);
+  const [dialect, setDialect] = useState(DEFAULT_DIALECT);
+  const [dialects, setDialects] = useState(FALLBACK_DIALECTS);
+  const [detectingDialect, setDetectingDialect] = useState(false);
+  const [detectHint, setDetectHint] = useState('');
 
   const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.TB);
   const [branchFilter, setBranchFilter] = useState('');
@@ -75,6 +90,14 @@ export function useLineageGraph(fitGraphToView) {
   const [filterNoMatches, setFilterNoMatches] = useState(false);
 
   const searchInputRef = useRef(null);
+  const sqlEditorRef = useRef(null);
+  const sqlRef = useRef(DEFAULT_SQL);
+
+  useEffect(() => {
+    fetchDialects()
+      .then((list) => setDialects(list))
+      .catch(() => setDialects(FALLBACK_DIALECTS));
+  }, []);
 
   /** Layout full graph and persist positions on baseNodes/baseEdges. */
   const layoutFullGraph = useCallback(
@@ -96,19 +119,21 @@ export function useLineageGraph(fitGraphToView) {
 
   /** Apply branch/focus filters using base graph positions (no relayout). */
   const applyDisplayFromBase = useCallback(
-    (mode = layoutMode, focusOverride = focusMode) => {
-      if (!baseNodes.length) return;
+    (mode = layoutMode, focusOverride = focusMode, overrides = {}) => {
+      const sourceNodes = overrides.baseNodes ?? baseNodes;
+      const sourceEdges = overrides.baseEdges ?? baseEdges;
+      if (!sourceNodes.length) return;
 
-      let visibleIds = getBranchFilterVisibleIds(baseNodes, baseEdges, branchFilter);
+      let visibleIds = getBranchFilterVisibleIds(sourceNodes, sourceEdges, branchFilter);
       const noMatches = Boolean(branchFilter.trim() && visibleIds && visibleIds.size === 0);
       setFilterNoMatches(noMatches);
       if (noMatches) visibleIds = null;
 
-      let displayNodes = baseNodes;
-      let displayEdges = baseEdges;
+      let displayNodes = sourceNodes;
+      let displayEdges = sourceEdges;
 
       if (visibleIds) {
-        const result = applyVisibilityFilter(baseNodes, baseEdges, visibleIds);
+        const result = applyVisibilityFilter(sourceNodes, sourceEdges, visibleIds);
         displayNodes = result.nodes;
         displayEdges = result.edges;
       }
@@ -116,8 +141,8 @@ export function useLineageGraph(fitGraphToView) {
       if (focusOverride && selectedNodeId) {
         const focusSet =
           focusOverride === 'upstream'
-            ? getUpstreamNodes(selectedNodeId, baseEdges)
-            : getDownstreamNodes(selectedNodeId, baseEdges);
+            ? getUpstreamNodes(selectedNodeId, sourceEdges)
+            : getDownstreamNodes(selectedNodeId, sourceEdges);
         focusSet.add(selectedNodeId);
         const focused = applyVisibilityFilter(displayNodes, displayEdges, focusSet);
         displayNodes = focused.nodes;
@@ -206,18 +231,34 @@ export function useLineageGraph(fitGraphToView) {
     );
   }, [setNodes, setEdges]);
 
+  /** Always read live editor text — React state can lag behind paste/typing. */
+  const getSqlForAction = () => {
+    const fromEditor = sqlEditorRef.current?.getValue?.();
+    if (typeof fromEditor === 'string') {
+      return fromEditor;
+    }
+    return sqlRef.current;
+  };
+
   const handleParseSql = async () => {
+    const sqlToParse = getSqlForAction();
+    if (sqlToParse !== sqlRef.current) {
+      sqlRef.current = sqlToParse;
+      setSql(sqlToParse);
+    }
+
     setLoading(true);
     setSearchQuery('');
     setSearchResults([]);
     setWarnings([]);
+    setParseError(null);
     setSelectedNodeId(null);
     setSelectedColumn(null);
     setBreadcrumb([]);
     setFocusMode(null);
 
     try {
-      const data = await parseSql(sql);
+      const data = await parseSql(sqlToParse, dialect);
       setWarnings(data.warnings || []);
 
       const styledEdges = styleApiEdges(data.edges);
@@ -250,10 +291,11 @@ export function useLineageGraph(fitGraphToView) {
         );
       }
 
-      setBaseEdges(diffEdges);
-
-      layoutFullGraph(diffNodes, diffEdges, layoutMode);
-      applyDisplayFromBase(layoutMode, null);
+      const laidOut = layoutFullGraph(diffNodes, diffEdges, layoutMode);
+      applyDisplayFromBase(layoutMode, null, {
+        baseNodes: laidOut.nodes,
+        baseEdges: laidOut.edges,
+      });
 
       setNodes((nds) =>
         nds.map((n) => ({
@@ -263,10 +305,70 @@ export function useLineageGraph(fitGraphToView) {
       );
       fitGraphToView();
     } catch (error) {
-      alert(error.message || 'Error parsing SQL. Is your FastAPI server running?');
+      setWarnings([]);
+      if (error.name === 'ParseSqlError') {
+        setParseError({
+          message: error.message,
+          errors: error.errors,
+          guidance: error.guidance,
+        });
+      } else {
+        setParseError({
+          message: error.message || 'Failed to parse SQL',
+          errors: [
+            {
+              message:
+                error.message || 'Error parsing SQL. Is your FastAPI server running?',
+              line: null,
+              column: null,
+            },
+          ],
+        });
+      }
     }
 
     setLoading(false);
+  };
+
+  const handleDismissParseError = () => setParseError(null);
+
+  const handleJumpToError = (line, column) => {
+    sqlEditorRef.current?.jumpToLine(line, column);
+  };
+
+  const handleSqlChange = (value) => {
+    sqlRef.current = value;
+    setSql(value);
+    if (parseError) setParseError(null);
+    if (detectHint) setDetectHint('');
+  };
+
+  const handleDialectChange = (value) => {
+    setDialect(value);
+    setDetectHint('');
+  };
+
+  const handleDetectDialect = async () => {
+    const sqlToDetect = getSqlForAction();
+    if (!sqlToDetect.trim()) return;
+    if (sqlToDetect !== sqlRef.current) {
+      sqlRef.current = sqlToDetect;
+      setSql(sqlToDetect);
+    }
+    setDetectingDialect(true);
+    try {
+      const result = await detectDialect(sqlToDetect);
+      setDialect(result.dialect);
+      const label = dialects.find((d) => d.id === result.dialect)?.label || result.dialect;
+      const signalText =
+        result.signals?.length > 0
+          ? result.signals.map((s) => s.reason).join('; ')
+          : 'No strong signals — defaulting to best guess';
+      setDetectHint(`Detected ${label} (${result.confidence} confidence): ${signalText}`);
+    } catch {
+      setDetectHint('Could not detect dialect — check API connection.');
+    }
+    setDetectingDialect(false);
   };
 
   const handleResetCanvas = () => {
@@ -299,15 +401,21 @@ export function useLineageGraph(fitGraphToView) {
       style: { ...DEFAULT_EDGE_STYLE, transition: 'all 0.3s ease' },
     }));
 
-    layoutFullGraph(resetNodes, resetEdges, layoutMode);
-    applyDisplayFromBase(layoutMode);
+    const laidOut = layoutFullGraph(resetNodes, resetEdges, layoutMode);
+    applyDisplayFromBase(layoutMode, null, {
+      baseNodes: laidOut.nodes,
+      baseEdges: laidOut.edges,
+    });
     fitGraphToView();
   };
 
   const handleLayoutChange = (mode) => {
     setLayoutMode(mode);
-    layoutFullGraph(baseNodes, baseEdges, mode);
-    applyDisplayFromBase(mode);
+    const laidOut = layoutFullGraph(baseNodes, baseEdges, mode);
+    applyDisplayFromBase(mode, focusMode, {
+      baseNodes: laidOut.nodes,
+      baseEdges: laidOut.edges,
+    });
     fitGraphToView();
   };
 
@@ -498,8 +606,18 @@ export function useLineageGraph(fitGraphToView) {
     onNodesChange,
     onEdgesChange,
     sql,
-    setSql,
+    setSql: handleSqlChange,
     loading,
+    parseError,
+    handleDismissParseError,
+    handleJumpToError,
+    sqlEditorRef,
+    dialect,
+    dialects,
+    handleDialectChange,
+    handleDetectDialect,
+    detectingDialect,
+    detectHint,
     searchQuery,
     searchResults,
     searchIndex,
