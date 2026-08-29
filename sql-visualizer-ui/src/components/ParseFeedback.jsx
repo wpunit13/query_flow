@@ -86,6 +86,7 @@ export default function ParseFeedback({
   warnings,
   onJumpToError,
   onDismissError,
+  onDismissWarnings,
 }) {
   const hasWarnings = warnings?.length > 0;
   const hasErrors = parseError?.errors?.length > 0;
@@ -210,7 +211,32 @@ export default function ParseFeedback({
             color: '#92400e',
           }}
         >
-          <strong>Parse warnings ({warnings.length})</strong>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+          >
+            <strong>Parse warnings ({warnings.length})</strong>
+            {onDismissWarnings && (
+              <button
+                type="button"
+                onClick={onDismissWarnings}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: '#92400e',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                }}
+              >
+                Dismiss
+              </button>
+            )}
+          </div>
           <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#a16207' }}>
             Non-fatal — the graph may still render. Review before trusting lineage.
           </p>

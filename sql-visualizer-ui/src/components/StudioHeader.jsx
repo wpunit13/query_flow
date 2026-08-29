@@ -1,11 +1,10 @@
 import { useTheme } from '../context/ThemeContext';
-import { panelHeaderStyle, outlinePrimaryButtonStyle, secondaryButtonStyle, primaryButtonStyle } from '../theme/uiStyles';
-import { ResetIcon, SearchIcon } from '../icons';
+import { panelHeaderStyle } from '../theme/uiStyles';
 import SqlEditor from './SqlEditor';
 import ParseFeedback from './ParseFeedback';
 import DialectSelector from './DialectSelector';
 import ExploreSummaryBar from './ExploreSummaryBar';
-import ThemeToggle from './ThemeToggle';
+import HeaderActionGroup from './HeaderActionGroup';
 
 export default function StudioHeader({
   studioMode,
@@ -32,6 +31,7 @@ export default function StudioHeader({
   warnings,
   parseError,
   onDismissError,
+  onDismissWarnings,
   onJumpToError,
   sqlEditorRef,
   searchInputRef,
@@ -67,141 +67,61 @@ export default function StudioHeader({
         ...panelHeaderStyle(theme),
         display: 'flex',
         flexDirection: 'column',
-        gap: '16px',
+        gap: '12px',
       }}
     >
       <div
         style={{
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          flexWrap: 'wrap',
           gap: '12px',
+          flexWrap: 'wrap',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '18px', color: theme.textMain }}>
             SQL Lineage Studio
           </h2>
-          <ThemeToggle size="sm" />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              border: `1px solid ${theme.border}`,
-              borderRadius: '6px',
-              padding: '8px 12px',
-              background: theme.bg,
-              minWidth: '240px',
-            }}
-          >
-            <SearchIcon />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search table or column... (/ to focus)"
-              value={searchQuery}
-              onChange={onSearchChange}
-              onKeyDown={onSearchKeyDown}
-              style={{
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                width: '100%',
-                fontSize: '13px',
-                color: theme.textMain,
-              }}
-            />
-            {searchResults.length > 0 && (
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: theme.textMuted,
-                  whiteSpace: 'nowrap',
-                  marginLeft: '8px',
-                }}
-              >
-                {searchIndex + 1} / {searchResults.length} (Enter ↵)
-              </span>
-            )}
-            {searchQuery.trim() && searchResults.length === 0 && (
-              <span
-                style={{
-                  fontSize: '11px',
-                  color: theme.error,
-                  whiteSpace: 'nowrap',
-                  marginLeft: '8px',
-                }}
-              >
-                No matches
-              </span>
-            )}
-          </div>
+        <span
+          style={{
+            width: '1px',
+            height: '28px',
+            background: theme.border,
+            flexShrink: 0,
+          }}
+          aria-hidden="true"
+        />
 
-          {hasRenderedGraph && (
-            <button
-              type="button"
-              onClick={onEnterExplore}
-              style={{
-                ...outlinePrimaryButtonStyle(theme),
-                height: '36px',
-                whiteSpace: 'nowrap',
-              }}
-              title="Back to graph without re-rendering (E)"
-            >
-              Back to Explore
-            </button>
-          )}
+        <DialectSelector
+          dialect={dialect}
+          dialects={dialects}
+          onDialectChange={onDialectChange}
+          onDetectDialect={onDetectDialect}
+          detecting={detectingDialect}
+          detectHint={detectHint}
+        />
 
-          <button
-            onClick={onReset}
-            style={{
-              ...secondaryButtonStyle(theme),
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '36px',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = theme.headerBg)}
-            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = theme.cardBg)}
-          >
-            <ResetIcon />
-            Reset
-          </button>
-          <button
-            onClick={onParse}
-            disabled={loading}
-            style={{
-              ...primaryButtonStyle(theme, loading),
-              padding: '8px 24px',
-              height: '36px',
-              minWidth: '120px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {loading ? 'Parsing…' : 'Render DAG'}
-          </button>
-        </div>
+        <div style={{ flex: '1 1 24px', minWidth: '8px' }} />
+
+        <HeaderActionGroup
+          modeSwitchLabel="Explore"
+          showModeSwitch={hasRenderedGraph}
+          onModeSwitch={onEnterExplore}
+          modeSwitchTitle="Back to graph without re-rendering (E)"
+          onReset={onReset}
+          onParse={onParse}
+          loading={loading}
+        />
       </div>
-
-      <DialectSelector
-        dialect={dialect}
-        dialects={dialects}
-        onDialectChange={onDialectChange}
-        onDetectDialect={onDetectDialect}
-        detecting={detectingDialect}
-        detectHint={detectHint}
-      />
 
       <ParseFeedback
         parseError={parseError}
         warnings={warnings}
         onJumpToError={onJumpToError}
         onDismissError={onDismissError}
+        onDismissWarnings={onDismissWarnings}
       />
 
       <div style={{ position: 'relative' }}>

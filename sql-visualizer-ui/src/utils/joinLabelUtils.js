@@ -34,6 +34,42 @@ export function formatOperandDisplay(label) {
   };
 }
 
+/** Human label: `stores (s)` — table first, alias in parens when useful. */
+export function formatTableAliasPhrase(label) {
+  const display = formatOperandDisplay(label);
+  if (!display.table || display.table === '—') return '';
+  if (display.nested) return '';
+  if (display.alias) return `${display.table} (${display.alias})`;
+  return display.table;
+}
+
+/**
+ * One join step as SQL reads it: the table being brought in + ON.
+ * Ignores nested left-join blobs (`INNER JOIN: a + b`) — those are graph internals.
+ */
+export function formatJoinStepLine(op) {
+  if (!op || op.opKind === 'union') return '';
+  const joinType = op.opType || op.joinType || 'JOIN';
+  const rightLabel = op.right?.label || '';
+  const broughtIn = formatTableAliasPhrase(rightLabel);
+  const on = op.conditions?.[0] ? ` ON ${op.conditions[0]}` : '';
+  if (!broughtIn) {
+    return `${joinType}${on}`.trim();
+  }
+  return `${joinType} ${broughtIn}${on}`;
+}
+
+/** Join details without repeating the join type (already shown in another column). */
+export function formatJoinStepDetail(op) {
+  const line = formatJoinStepLine(op);
+  if (!line) return '';
+  const joinType = op?.opType || op?.joinType || 'JOIN';
+  const prefix = `${joinType} `;
+  if (line.startsWith(prefix)) return line.slice(prefix.length);
+  if (line === joinType) return '';
+  return line;
+}
+
 /** Flatten nested join operand labels (e.g. "INNER JOIN: p (products) + c (cats)"). */
 export function collectAliasEntriesFromOperands(operands = []) {
   const entries = [];

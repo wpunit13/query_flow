@@ -14,10 +14,18 @@ export function useKeyboardShortcuts({
   onToggleZen,
   onViewGraph,
   onViewTable,
+  onViewSource,
+  onViewPipelineTab,
+  onViewOperations,
+  onViewTarget,
+  onSetPipelineGraph,
+  onSetWholeGraph,
+  isTableView,
   enabled = true,
   zenMode = false,
   studioMode = 'author',
   canSwitchView = false,
+  canFocusSearch = false,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -29,18 +37,26 @@ export function useKeyboardShortcuts({
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable;
 
-      if (e.key === '/' && !isInput) {
+      if (e.key === '/' && !isInput && canFocusSearch) {
         e.preventDefault();
         onFocusSearch?.();
         return;
       }
 
-      if (isInput && e.key !== 'Escape') return;
+      if (e.key === 'Escape' && isInput) {
+        e.preventDefault();
+        target.blur();
+        return;
+      }
+
+      if (isInput) return;
 
       // Let the browser keep Cmd/Ctrl shortcuts (Cmd+R refresh, Cmd+F find, etc.).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-      switch (e.key) {
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+
+      switch (key) {
         case 'f':
           if (!isInput) {
             e.preventDefault();
@@ -57,13 +73,13 @@ export function useKeyboardShortcuts({
           onClearSelection?.();
           break;
         case 'u':
-          if (!isInput) {
+          if (!isInput && !isTableView) {
             e.preventDefault();
             onFocusUpstream?.();
           }
           break;
         case 'd':
-          if (!isInput) {
+          if (!isInput && !isTableView) {
             e.preventDefault();
             onFocusDownstream?.();
           }
@@ -81,9 +97,10 @@ export function useKeyboardShortcuts({
           }
           break;
         case 't':
-          if (!isInput && canSwitchView) {
+          if (!isInput) {
             e.preventDefault();
-            onViewTable?.();
+            if (isTableView) onViewTarget?.();
+            else if (canSwitchView) onViewTable?.();
           }
           break;
         case 'z':
@@ -92,11 +109,36 @@ export function useKeyboardShortcuts({
             onToggleZen?.();
           }
           break;
+        case 's':
+          if (!isInput && isTableView) {
+            e.preventDefault();
+            onViewSource?.();
+          }
+          break;
+        case 'p':
+          if (!isInput) {
+            e.preventDefault();
+            if (isTableView) onViewPipelineTab?.();
+            else onSetPipelineGraph?.();
+          }
+          break;
+        case 'o':
+          if (!isInput && isTableView) {
+            e.preventDefault();
+            onViewOperations?.();
+          }
+          break;
+        case 'w':
+          if (!isInput && !isTableView) {
+            e.preventDefault();
+            onSetWholeGraph?.();
+          }
+          break;
         case '1':
-          if (!isInput) onLayoutTB?.();
+          if (!isInput && !isTableView) onLayoutTB?.();
           break;
         case '2':
-          if (!isInput) onLayoutLR?.();
+          if (!isInput && !isTableView) onLayoutLR?.();
           break;
         case '?':
           if (!isInput) onToggleDiff?.();
@@ -125,6 +167,14 @@ export function useKeyboardShortcuts({
     onToggleZen,
     onViewGraph,
     onViewTable,
+    onViewSource,
+    onViewPipelineTab,
+    onViewOperations,
+    onViewTarget,
+    onSetPipelineGraph,
+    onSetWholeGraph,
+    isTableView,
     canSwitchView,
+    canFocusSearch,
   ]);
 }

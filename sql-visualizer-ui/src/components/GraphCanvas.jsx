@@ -5,6 +5,7 @@ import {
   MiniMap,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useCallback, useState } from 'react';
 import { minimapNodeColor, minimapNodeStrokeColor } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import { flowNodeTypes } from './nodes/flowNodeTypes';
@@ -20,6 +21,25 @@ export default function GraphCanvas({
   showMinimap = true,
 }) {
   const { theme } = useTheme();
+  const [nodesDraggable, setNodesDraggable] = useState(true);
+
+  const handleNodesChange = useCallback(
+    (changes) => {
+      if (!nodesDraggable) {
+        const filtered = changes.filter((change) => change.type !== 'position');
+        if (filtered.length > 0) {
+          onNodesChange(filtered);
+        }
+        return;
+      }
+      onNodesChange(changes);
+    },
+    [onNodesChange, nodesDraggable]
+  );
+
+  const handleInteractiveChange = useCallback((interactive) => {
+    setNodesDraggable(interactive);
+  }, []);
 
   return (
     <div
@@ -33,11 +53,17 @@ export default function GraphCanvas({
         nodes={nodes}
         edges={edges}
         nodeTypes={flowNodeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onInit={onInit}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        nodesDraggable={nodesDraggable}
+        nodesConnectable={false}
+        panOnDrag={true}
+        zoomOnScroll={true}
+        zoomOnPinch={true}
+        panOnScroll={false}
         defaultEdgeOptions={{
           style: { stroke: theme.edgeStroke, strokeWidth: 2.75 },
         }}
@@ -47,7 +73,10 @@ export default function GraphCanvas({
         style={{ background: theme.bg }}
       >
         <Background color={theme.backgroundGrid} gap={20} size={1} />
-        <Controls style={{ boxShadow: theme.shadowCard }} />
+        <Controls
+          style={{ boxShadow: theme.shadowCard }}
+          onInteractiveChange={handleInteractiveChange}
+        />
         {showMinimap && (
           <MiniMap
             nodeColor={minimapNodeColor}

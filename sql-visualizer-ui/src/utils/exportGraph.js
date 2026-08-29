@@ -173,11 +173,11 @@ export async function downloadGraphPdf(rfInstance) {
   pdf.save(`lineage-graph-${stamp()}.pdf`);
 }
 
-export async function downloadOpenLineageExport(sql, dialect) {
+export async function downloadOpenLineageExport(sql, dialect, lineage) {
   const response = await fetch(`${getApiBaseUrl()}/api/v1/export/openlineage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, dialect }),
+    body: JSON.stringify({ sql, dialect, lineage }),
   });
   if (!response.ok) {
     throw new Error(`OpenLineage export failed (${response.status})`);

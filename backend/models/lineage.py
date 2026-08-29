@@ -13,6 +13,12 @@ class SQLRequest(BaseModel):
     )
 
 
+class OpenLineageExportRequest(BaseModel):
+    sql: str = Field(..., min_length=1, description="SQL query")
+    dialect: str = Field(default="bigquery", description="SQLGlot dialect id")
+    lineage: dict = Field(..., description="Parsed lineage graph dictionary")
+
+
 class ColumnLineageEntry(BaseModel):
     name: str = Field(..., description="Output column name or alias")
     sources: List[str] = Field(
@@ -70,6 +76,22 @@ class NodeData(BaseModel):
     branches: List[UnionBranch] = Field(
         default_factory=list,
         description="UNION branch metadata for union nodes",
+    )
+    group_by: List[str] = Field(
+        default_factory=list,
+        description="GROUP BY expressions on this stage",
+    )
+    where_clause: Optional[str] = Field(
+        default=None,
+        description="WHERE filter expression on this stage",
+    )
+    having_clause: Optional[str] = Field(
+        default=None,
+        description="HAVING filter expression on this stage",
+    )
+    qualify_clause: Optional[str] = Field(
+        default=None,
+        description="QUALIFY filter expression on this stage",
     )
     column_lineage: List[ColumnLineageEntry] = Field(
         default_factory=list,

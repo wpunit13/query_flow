@@ -165,10 +165,10 @@ export function readInitialStudioMode() {
 
 export function readInitialTableTab() {
   const meta = readLineageSessionMeta();
-  if (meta?.tableTab === TABLE_TABS.PIPELINE || meta?.tableTab === TABLE_TABS.SOURCES) {
+  if (meta?.tableTab) {
     return meta.tableTab;
   }
-  if (isLargeStoredSql()) return TABLE_TABS.PIPELINE;
+  if (isLargeStoredSql()) return TABLE_TABS.OUTPUT;
   return TABLE_TABS.SOURCES;
 }
 

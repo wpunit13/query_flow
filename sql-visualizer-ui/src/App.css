@@ -66,3 +66,47 @@ textarea::placeholder {
 button:disabled {
   cursor: not-allowed;
 }
+
+.ls-inspector-rail {
+  flex-shrink: 0;
+  width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ls-inspector-rail.is-open {
+  width: 360px;
+}
+
+.ls-inspector-panel {
+  width: 360px;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  transform: translateX(18px);
+  opacity: 0;
+  box-shadow: -10px 0 28px rgb(15 23 42 / 0.1);
+  transition:
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+
+.ls-inspector-rail.is-open .ls-inspector-panel {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+[data-theme='dark'] .ls-inspector-panel {
+  box-shadow: -10px 0 28px rgb(0 0 0 / 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ls-inspector-rail,
+  .ls-inspector-panel {
+    transition: none;
+  }
+}

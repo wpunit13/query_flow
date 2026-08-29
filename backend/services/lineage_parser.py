@@ -115,6 +115,38 @@ def join_condition_sql(join_expr: Join, dialect: str) -> Optional[str]:
     return None
 
 
+def extract_select_transform_clauses(select_expr: Select, dialect: str) -> Dict[str, Any]:
+    """Extract GROUP BY, WHERE, HAVING, and QUALIFY clauses from a Select expression."""
+    res: Dict[str, Any] = {
+        "group_by": [],
+        "where_clause": None,
+        "having_clause": None,
+        "qualify_clause": None,
+    }
+    if not isinstance(select_expr, Select):
+        return res
+
+    group_clause = select_expr.args.get("group")
+    if group_clause:
+        group_exprs = group_clause.expressions
+        res["group_by"] = [e.sql(dialect=dialect) for e in group_exprs]
+
+    where_clause = select_expr.args.get("where")
+    if where_clause and where_clause.this:
+        res["where_clause"] = where_clause.this.sql(dialect=dialect)
+
+    having_clause = select_expr.args.get("having")
+    if having_clause and having_clause.this:
+        res["having_clause"] = having_clause.this.sql(dialect=dialect)
+
+    qualify_clause = select_expr.args.get("qualify")
+    if qualify_clause and qualify_clause.this:
+        res["qualify_clause"] = qualify_clause.this.sql(dialect=dialect)
+
+    return res
+
+
+
 def get_from_join_steps(select_expr: Select) -> List[Tuple[Optional[Join], Any]]:
     """Return FROM/JOIN steps in order without flattening nested subqueries."""
     from_clause = select_expr.args.get("from_") or select_expr.args.get("from")
@@ -164,16 +196,18 @@ def leaf_lineage_sources(node) -> List[str]:
     return sources
 
 
-def build_column_lineage(output_columns: List[str], sql: str, dialect: str) -> List[Dict[str, Any]]:
-    """Build column-level lineage for each output column using sqlglot.lineage."""
+def build_column_lineage(output_columns: List[str], ast: Any, dialect: str) -> List[Dict[str, Any]]:
+    """Build column-level lineage for all output columns using sqlglot.lineage in one pass."""
     entries: List[Dict[str, Any]] = []
-    for col in output_columns:
-        try:
-            root = sqlglot_lineage.lineage(col, sql, dialect=dialect)
-            sources = leaf_lineage_sources(root)
-        except Exception:
-            sources = []
-        entries.append({"name": col, "sources": sources})
+    try:
+        lineage_dict = sqlglot_lineage.lineage(None, ast, dialect=dialect)
+        for col in output_columns:
+            root = lineage_dict.get(col)
+            sources = leaf_lineage_sources(root) if root else []
+            entries.append({"name": col, "sources": sources})
+    except Exception:
+        for col in output_columns:
+            entries.append({"name": col, "sources": []})
     return entries
 
 
@@ -225,6 +259,10 @@ class LineageGraphBuilder:
         join_operands: Optional[List[Dict[str, Any]]] = None,
         alias: Optional[str] = None,
         column_lineage: Optional[List[Dict[str, Any]]] = None,
+        group_by: Optional[List[str]] = None,
+        where_clause: Optional[str] = None,
+        having_clause: Optional[str] = None,
+        qualify_clause: Optional[str] = None,
     ) -> None:
         if node_id in self.nodes_dict:
             existing = self.nodes_dict[node_id]
@@ -236,6 +274,14 @@ class LineageGraphBuilder:
                 existing["data"]["alias"] = alias
             if join_operands and not existing["data"].get("join_operands"):
                 existing["data"]["join_operands"] = join_operands
+            if group_by and not existing["data"].get("group_by"):
+                existing["data"]["group_by"] = group_by
+            if where_clause and not existing["data"].get("where_clause"):
+                existing["data"]["where_clause"] = where_clause
+            if having_clause and not existing["data"].get("having_clause"):
+                existing["data"]["having_clause"] = having_clause
+            if qualify_clause and not existing["data"].get("qualify_clause"):
+                existing["data"]["qualify_clause"] = qualify_clause
             return
 
         self.nodes_dict[node_id] = {
@@ -258,6 +304,10 @@ class LineageGraphBuilder:
                 "branch_count": branch_count,
                 "branches": branches or [],
                 "join_operands": join_operands or [],
+                "group_by": group_by or [],
+                "where_clause": where_clause,
+                "having_clause": having_clause,
+                "qualify_clause": qualify_clause,
                 "column_lineage": column_lineage or [],
             },
         }
@@ -298,12 +348,17 @@ class LineageGraphBuilder:
             alias = source_expr.alias
             label = str(alias) if alias else sub_id
             cols = extract_output_columns(inner) if isinstance(inner, (Select, Union)) else []
+            clauses = extract_select_transform_clauses(inner, self.dialect) if isinstance(inner, Select) else {"group_by": [], "where_clause": None, "having_clause": None, "qualify_clause": None}
             self.add_node(
                 sub_id,
                 label,
                 kind="subquery",
                 columns=cols,
                 alias=str(alias) if alias else None,
+                group_by=clauses["group_by"],
+                where_clause=clauses["where_clause"],
+                having_clause=clauses["having_clause"],
+                qualify_clause=clauses["qualify_clause"],
             )
             if isinstance(inner, (Select, Union)):
                 self.process_select_expression(inner, sub_id, "subquery")
@@ -359,7 +414,7 @@ class LineageGraphBuilder:
 
         if attach_lineage:
             cols = extract_output_columns(union_expr)
-            lineage = build_column_lineage(cols, self.sql, self.dialect)
+            lineage = build_column_lineage(cols, union_expr, self.dialect)
             self.add_node(
                 target_id,
                 self.nodes_dict[target_id]["data"]["label"],
@@ -382,7 +437,7 @@ class LineageGraphBuilder:
             self.process_select_block(select_expr, target_id, chain_to_target=True)
             if attach_lineage:
                 cols = extract_output_columns(select_expr)
-                lineage = build_column_lineage(cols, self.sql, self.dialect)
+                lineage = build_column_lineage(cols, select_expr, self.dialect)
                 if target_id in self.nodes_dict:
                     self.nodes_dict[target_id]["data"]["columns"] = cols
                     self.nodes_dict[target_id]["data"]["column_lineage"] = lineage
@@ -461,7 +516,8 @@ class LineageGraphBuilder:
         for cte in ast.find_all(CTE):
             self.cte_names.add(cte.alias)
             cols = extract_output_columns(cte.this)
-            lineage = build_column_lineage(cols, self.sql, self.dialect)
+            lineage = build_column_lineage(cols, cte.this, self.dialect)
+            clauses = extract_select_transform_clauses(cte.this, self.dialect)
             self.add_node(
                 cte.alias,
                 cte.alias,
@@ -469,6 +525,10 @@ class LineageGraphBuilder:
                 qualified_name=cte.alias,
                 columns=cols,
                 column_lineage=lineage,
+                group_by=clauses["group_by"],
+                where_clause=clauses["where_clause"],
+                having_clause=clauses["having_clause"],
+                qualify_clause=clauses["qualify_clause"],
             )
             self.process_select_expression(cte.this, cte.alias, "cte", attach_lineage=False)
 
@@ -477,7 +537,8 @@ class LineageGraphBuilder:
         qual = qualify_table(target_table)
         target_id = qual["qualified_name"] or qual["name"]
         cols = extract_output_columns(ast.expression) if ast.expression else []
-        lineage = build_column_lineage(cols, self.sql, self.dialect) if cols else []
+        lineage = build_column_lineage(cols, ast.expression, self.dialect) if cols else []
+        clauses = extract_select_transform_clauses(ast.expression, self.dialect) if ast.expression else {"group_by": [], "where_clause": None, "having_clause": None, "qualify_clause": None}
 
         self.add_node(
             target_id,
@@ -488,6 +549,10 @@ class LineageGraphBuilder:
             database=qual["database"],
             columns=cols,
             column_lineage=lineage,
+            group_by=clauses["group_by"],
+            where_clause=clauses["where_clause"],
+            having_clause=clauses["having_clause"],
+            qualify_clause=clauses["qualify_clause"],
         )
 
         if isinstance(ast.expression, (Select, Union)):
@@ -500,7 +565,8 @@ class LineageGraphBuilder:
         expr = ast.expression
 
         cols = extract_output_columns(expr) if expr else []
-        lineage = build_column_lineage(cols, self.sql, self.dialect) if cols else []
+        lineage = build_column_lineage(cols, expr, self.dialect) if cols else []
+        clauses = extract_select_transform_clauses(expr, self.dialect) if expr else {"group_by": [], "where_clause": None, "having_clause": None, "qualify_clause": None}
 
         self.add_node(
             target_id,
@@ -511,6 +577,10 @@ class LineageGraphBuilder:
             database=qual["database"],
             columns=cols,
             column_lineage=lineage,
+            group_by=clauses["group_by"],
+            where_clause=clauses["where_clause"],
+            having_clause=clauses["having_clause"],
+            qualify_clause=clauses["qualify_clause"],
         )
 
         if isinstance(expr, (Select, Union)):
@@ -554,7 +624,8 @@ class LineageGraphBuilder:
 
     def process_select_root(self, ast: Select) -> None:
         cols = extract_output_columns(ast)
-        lineage = build_column_lineage(cols, self.sql, self.dialect)
+        lineage = build_column_lineage(cols, ast, self.dialect)
+        clauses = extract_select_transform_clauses(ast, self.dialect)
         self.add_node(
             "Final_Output",
             "Final View Output",
@@ -562,6 +633,10 @@ class LineageGraphBuilder:
             qualified_name="Final_Output",
             columns=cols,
             column_lineage=lineage,
+            group_by=clauses["group_by"],
+            where_clause=clauses["where_clause"],
+            having_clause=clauses["having_clause"],
+            qualify_clause=clauses["qualify_clause"],
         )
 
         query = ast.copy()

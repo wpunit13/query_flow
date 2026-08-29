@@ -1,7 +1,6 @@
-import { useMemo } from 'react';
-import { kindLabels, kindColors } from '../theme';
+import { useEffect, useMemo, useState } from 'react';
+import { kindLabels } from '../theme';
 import { useTheme } from '../context/ThemeContext';
-import { toolbarButtonStyle } from '../theme/uiStyles';
 import { getColumnLineageHighlight } from '../utils/lineagePath';
 import {
   TABLE_TABS,
@@ -11,24 +10,64 @@ import {
   getStageOperationSummary,
   getSourcesUsedInStage,
   getOutputNode,
-  getColumnSourcesText,
   isNodeInColumnPath,
   filterOperationsForColumn,
   filterOperationsForStage,
   isPipelineQuery,
 } from '../utils/lineageTableModel';
+import { resolveTableInspector } from '../utils/lineageTableInspector';
+import { formatJoinStepDetail } from '../utils/joinLabelUtils';
+import SelectionInspector, { InspectorRail } from './SelectionInspector';
+
+const TYPE = {
+  headerSize: '11px',
+  headerWeight: 600,
+  bodySize: '12px',
+  primaryWeight: 500,
+  secondaryWeight: 400,
+};
+
+/** Fit = shrink to content. Fill = take leftover, ellipsis. Resizable cols can replace `fit` later. */
+const COL = {
+  sources: [
+    { key: 'name', label: 'Table' },
+    { key: 'kind', label: 'Kind', fit: true },
+    { key: 'qualified', label: 'Qualified name' },
+    { key: 'columns', label: 'Cols', fit: true, align: 'right' },
+    { key: 'usedIn', label: 'Used in' },
+  ],
+  pipeline: [
+    { key: 'step', label: '#', fit: true, align: 'right' },
+    { key: 'name', label: 'Stage' },
+    { key: 'kind', label: 'Kind', fit: true },
+    { key: 'columns', label: 'Cols', fit: true, align: 'right' },
+    { key: 'ops', label: 'Operations' },
+  ],
+  operations: [
+    { key: 'stage', label: 'Stage' },
+    { key: 'kind', label: 'Kind', fit: true },
+    { key: 'op', label: 'Operation', fit: true },
+    { key: 'detail', label: 'Details' },
+  ],
+  output: [
+    { key: 'column', label: 'Column' },
+    { key: 'sources', label: 'Source refs' },
+  ],
+};
 
 function KindBadge({ kind }) {
   const { theme } = useTheme();
   const label = kindLabels[kind] || kind;
-  const color = kindColors[kind] || theme.textMuted;
+  const color = theme.textMuted;
+  const bg = theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
   return (
     <span
       style={{
         fontSize: '10px',
-        fontWeight: '700',
+        fontWeight: 600,
+        letterSpacing: '0.02em',
         color,
-        background: `${color}18`,
+        background: bg,
         padding: '2px 6px',
         borderRadius: '4px',
       }}
@@ -38,266 +77,668 @@ function KindBadge({ kind }) {
   );
 }
 
+function PrimaryCell({ children }) {
+  const { theme } = useTheme();
+  return (
+    <span
+      title={typeof children === 'string' ? children : undefined}
+      style={{
+        fontSize: TYPE.bodySize,
+        fontWeight: TYPE.primaryWeight,
+        color: theme.textMain,
+        lineHeight: 1.4,
+        display: 'block',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SecondaryCell({ children, title }) {
+  const { theme } = useTheme();
+  const empty = children == null || children === '';
+  return (
+    <span
+      title={title}
+      style={{
+        fontSize: TYPE.bodySize,
+        fontWeight: TYPE.secondaryWeight,
+        color: theme.textMuted,
+        lineHeight: 1.4,
+        display: 'block',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        maxWidth: '100%',
+      }}
+    >
+      {empty ? '—' : children}
+    </span>
+  );
+}
+
+function MetaCell({ children }) {
+  const { theme } = useTheme();
+  return (
+    <span
+      style={{
+        fontSize: TYPE.bodySize,
+        fontWeight: TYPE.secondaryWeight,
+        color: theme.textMuted,
+        fontVariantNumeric: 'tabular-nums',
+        lineHeight: 1.4,
+      }}
+    >
+      {children == null || children === '' ? '—' : children}
+    </span>
+  );
+}
+
+function CodeCell({ children, title }) {
+  const { theme } = useTheme();
+  const empty = children == null || children === '';
+  if (empty) {
+    return <SecondaryCell />;
+  }
+  return (
+    <span
+      title={title}
+      style={{
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: '12px',
+        fontWeight: 400,
+        color: theme.textMuted,
+        background: 'transparent',
+        padding: 0,
+        borderRadius: '4px',
+        lineHeight: 1.4,
+        display: 'block',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 function DataTable({ columns, rows, emptyMessage }) {
   const { theme } = useTheme();
+  const [hoveredKey, setHoveredKey] = useState(null);
+  const rowDivider = theme.mode === 'dark' ? theme.mutedSurface : theme.bg;
 
-  const thStyle = {
-    textAlign: 'left',
+  const thStyle = (col) => ({
+    textAlign: col.align || 'left',
     padding: '8px 12px',
-    fontSize: '11px',
-    fontWeight: '600',
+    fontSize: TYPE.headerSize,
+    fontWeight: TYPE.headerWeight,
     color: theme.textMuted,
     borderBottom: `1px solid ${theme.border}`,
     background: theme.headerBg,
     whiteSpace: 'nowrap',
-  };
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    width: col.fit ? '1%' : undefined,
+  });
 
-  const tdStyle = {
+  const tdStyle = (col, isLastRow) => ({
     padding: '8px 12px',
-    fontSize: '12px',
+    fontSize: TYPE.bodySize,
+    fontWeight: TYPE.secondaryWeight,
     color: theme.textMain,
-    borderBottom: `1px solid ${theme.border}`,
-    verticalAlign: 'top',
+    borderBottom: isLastRow ? 'none' : `1px solid ${rowDivider}`,
+    verticalAlign: 'middle',
+    lineHeight: 1.4,
+    textAlign: col.align || 'left',
+    width: col.fit ? '1%' : undefined,
+    minWidth: col.fit ? undefined : 0,
+    whiteSpace: 'nowrap',
+    overflow: col.fit ? 'visible' : 'hidden',
+  });
+
+  const cardStyle = {
+    background: theme.cardBg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    overflow: 'hidden',
+    boxShadow: theme.shadowSubtle,
   };
 
   if (!rows.length) {
     return (
-      <div style={{ padding: '24px', color: theme.textMuted, fontSize: '13px' }}>
-        {emptyMessage}
+      <div style={{ padding: '8px' }}>
+        <div
+          style={{
+            ...cardStyle,
+            padding: '20px 12px',
+            color: theme.textMuted,
+            fontSize: TYPE.bodySize,
+          }}
+        >
+          {emptyMessage}
+        </div>
       </div>
     );
   }
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          {columns.map((col) => (
-            <th key={col.key} style={thStyle}>{col.label}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr
-            key={row.key}
-            onClick={row.onClick}
-            style={{
-              cursor: row.onClick ? 'pointer' : 'default',
-              background: row.selected
-                ? theme.rowSelectedBg
-                : row.dimmed
-                  ? theme.rowMutedBg
-                  : theme.cardBg,
-              opacity: row.dimmed ? 0.45 : 1,
-            }}
-          >
-            {columns.map((col) => (
-              <td key={col.key} style={tdStyle}>
-                {row.cells[col.key]}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function StageDetailPanel({
-  stageNode,
-  operations,
-  nodes,
-  edges,
-  selectedColumn,
-  columnHighlight,
-  onClear,
-}) {
-  const { theme } = useTheme();
-  if (!stageNode) return null;
-
-  const stageId = stageNode.id;
-  const columns = stageNode.data?.columns || [];
-  const stageOps = filterOperationsForStage(operations, stageId);
-  const sourcesUsed = getSourcesUsedInStage(stageId, nodes, edges);
-
-  return (
-    <div
-      style={{
-        borderTop: `1px solid ${theme.border}`,
-        background: theme.headerBg,
-        padding: '12px 16px',
-        maxHeight: '40%',
-        overflow: 'auto',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginBottom: '10px',
-        }}
-      >
-        <span style={{ fontWeight: '600', fontSize: '13px', color: theme.textMain }}>
-          {stageNode.data?.label || stageId}
-        </span>
-        <KindBadge kind={stageNode.data?.kind} />
-        {selectedColumn && (
-          <span style={{ fontSize: '11px', color: theme.textMuted }}>
-            Column trace: <strong>{selectedColumn}</strong>
-          </span>
-        )}
-        {onClear && (
-          <button
-            type="button"
-            onClick={onClear}
-            style={{
-              marginLeft: 'auto',
-              fontSize: '11px',
-              padding: '4px 10px',
-              border: `1px solid ${theme.border}`,
-              borderRadius: '6px',
-              background: theme.buttonBg,
-              color: theme.textMuted,
-              cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
-        )}
-      </div>
-
-      {sourcesUsed.length > 0 && (
-        <div style={{ fontSize: '11px', color: theme.textMuted, marginBottom: '8px' }}>
-          Sources: {sourcesUsed.join(', ')}
-        </div>
-      )}
-
-      {columns.length > 0 && (
-        <div style={{ marginBottom: '12px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: theme.textMuted,
-              marginBottom: '4px',
-            }}
-          >
-            Columns ({columns.length})
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {columns.map((col) => {
-              const inPath =
-                !columnHighlight ||
-                col === selectedColumn ||
-                columnHighlight.sources.some((s) =>
-                  s.toLowerCase().includes(col.toLowerCase())
-                );
+    <div style={{ padding: '8px' }}>
+      <div style={cardStyle}>
+        <table
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'auto',
+          }}
+        >
+          <thead>
+            <tr>
+              {columns.map((col) => (
+                <th key={col.key} style={thStyle(col)}>{col.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => {
+              const hovered = hoveredKey === row.key && !row.selected;
+              const isLastRow = rowIndex === rows.length - 1;
               return (
-                <span
-                  key={col}
+                <tr
+                  key={row.key}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    row.onClick?.(e);
+                  }}
+                  onMouseEnter={() => setHoveredKey(row.key)}
+                  onMouseLeave={() => setHoveredKey(null)}
                   style={{
-                    fontSize: '11px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    background: col === selectedColumn ? theme.primary : theme.cardBg,
-                    color: col === selectedColumn ? theme.onPrimary : theme.textMain,
-                    border: `1px solid ${theme.border}`,
-                    opacity: inPath ? 1 : 0.4,
+                    cursor: row.onClick ? 'pointer' : 'default',
+                    background: row.selected
+                      ? theme.rowSelectedBg
+                      : hovered
+                        ? theme.headerBg
+                        : theme.cardBg,
+                    boxShadow: row.selected
+                      ? `inset 2px 0 0 ${theme.primary}`
+                      : 'none',
+                    opacity: row.dimmed ? 0.5 : 1,
+                    transition: 'background-color 0.15s ease-in-out',
                   }}
                 >
-                  {col}
-                </span>
+                  {columns.map((col) => (
+                    <td key={col.key} style={tdStyle(col, isLastRow)}>
+                      {row.cells[col.key]}
+                    </td>
+                  ))}
+                </tr>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {(stageOps.length > 0) && (
-        <div>
-          {stageOps.filter((op) => op.opKind === 'union').length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
-              <div
-                style={{
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  color: theme.textMuted,
-                  marginBottom: '4px',
-                }}
-              >
-                Unions in this stage
-              </div>
-              <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: theme.textMain }}>
-                {stageOps
-                  .filter((op) => op.opKind === 'union')
-                  .map((op) => {
-                    const dimmed =
-                      columnHighlight &&
-                      !isNodeInColumnPath(op.id, columnHighlight) &&
-                      !op.branches.some((b) => isNodeInColumnPath(b.tail_id, columnHighlight));
-                    return (
-                      <li key={op.id} style={{ opacity: dimmed ? 0.4 : 1, marginBottom: '4px' }}>
-                        <strong>{op.opType}</strong> ({op.branchCount} branches)
-                        {op.branches.map((b) => ` — ${b.label}`).join('')}
-                      </li>
-                    );
-                  })}
-              </ul>
-            </div>
-          )}
-          {stageOps.filter((op) => op.opKind === 'join').length > 0 && (
-        <div>
-          <div
-            style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: theme.textMuted,
-              marginBottom: '4px',
-            }}
-          >
-            Joins in this stage ({stageOps.filter((op) => op.opKind === 'join').length})
-          </div>
-          <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: theme.textMain }}>
-            {stageOps
-              .filter((op) => op.opKind === 'join')
-              .map((op) => {
-              const dimmed =
-                columnHighlight &&
-                !isNodeInColumnPath(op.id, columnHighlight) &&
-                !op.operands.some((o) => isNodeInColumnPath(o.id, columnHighlight));
-              return (
-                <li key={op.id} style={{ opacity: dimmed ? 0.4 : 1, marginBottom: '4px' }}>
-                  <strong>{op.opType}</strong>
-                  {op.left && op.right
-                    ? ` — ${op.left.label} × ${op.right.label}`
-                    : ''}
-                  {op.conditions[0] ? ` ON ${op.conditions[0]}` : ''}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-          )}
-        </div>
-      )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-const SOURCE_KINDS = new Set(['physical_table', 'view']);
+
+function OperationsTable({
+  stages,
+  operations,
+  nodes,
+  selectedNodeId,
+  columnHighlight,
+  onNodeSelect,
+  onClearSelection,
+  emptyMessage,
+}) {
+  const { theme } = useTheme();
+  // Default to all stages collapsed, except if a stage is currently selected
+  const [collapsedStages, setCollapsedStages] = useState(() => {
+    const set = new Set(stages.map((s) => s.id));
+    if (selectedNodeId) {
+      set.delete(selectedNodeId);
+    }
+    return set;
+  });
+  const [hoveredKey, setHoveredKey] = useState(null);
+
+  useEffect(() => {
+    if (selectedNodeId) {
+      setCollapsedStages((prev) => {
+        if (!prev.has(selectedNodeId)) return prev;
+        const next = new Set(prev);
+        next.delete(selectedNodeId);
+        return next;
+      });
+    }
+  }, [selectedNodeId]);
+
+  const toggleStageCollapse = (stageId, e) => {
+    if (e) e.stopPropagation();
+    setCollapsedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      return next;
+    });
+  };
+
+  const expandAll = () => setCollapsedStages(new Set());
+  const collapseAll = () => setCollapsedStages(new Set(stages.map((s) => s.id)));
+
+  const toTitleCase = (str) =>
+    str
+      ? str
+          .toLowerCase()
+          .split(/[\s_]+/)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ')
+      : '—';
+
+  // Group operations by stageId
+  const opsByStage = useMemo(() => {
+    const map = new Map();
+    stages.forEach((s) => map.set(s.id, []));
+    operations.forEach((op) => {
+      const list = map.get(op.stageId);
+      if (list) list.push(op);
+      else {
+        if (!map.has(op.stageId)) map.set(op.stageId, []);
+        map.get(op.stageId).push(op);
+      }
+    });
+    return map;
+  }, [stages, operations]);
+
+  const activeStageEntries = stages.filter((s) => (opsByStage.get(s.id) || []).length > 0);
+
+  const cardStyle = {
+    background: theme.cardBg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    overflow: 'hidden',
+    boxShadow: theme.shadowSubtle,
+  };
+
+  if (!activeStageEntries.length) {
+    return (
+      <div style={{ padding: '8px' }}>
+        <div
+          style={{
+            ...cardStyle,
+            padding: '20px 12px',
+            color: theme.textMuted,
+            fontSize: TYPE.bodySize,
+          }}
+        >
+          {emptyMessage}
+        </div>
+      </div>
+    );
+  }
+
+  const thStyle = (col) => ({
+    textAlign: col.align || 'left',
+    padding: '8px 12px',
+    fontSize: TYPE.headerSize,
+    fontWeight: TYPE.headerWeight,
+    color: theme.textMuted,
+    borderBottom: `1px solid ${theme.border}`,
+    background: theme.headerBg,
+    whiteSpace: 'nowrap',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    width: col.fit ? '1%' : undefined,
+  });
+
+  const rowDivider = theme.mode === 'dark' ? theme.mutedSurface : theme.bg;
+
+  return (
+    <div style={{ padding: '8px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '8px',
+          paddingRight: '4px',
+        }}
+      >
+        <button
+          type="button"
+          onClick={expandAll}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: '11px',
+            color: theme.primary,
+            cursor: 'pointer',
+            padding: '2px 6px',
+            fontWeight: 500,
+          }}
+        >
+          Expand All
+        </button>
+        <span style={{ color: theme.border, fontSize: '11px' }}>•</span>
+        <button
+          type="button"
+          onClick={collapseAll}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: '11px',
+            color: theme.textMuted,
+            cursor: 'pointer',
+            padding: '2px 6px',
+            fontWeight: 500,
+          }}
+        >
+          Collapse All
+        </button>
+      </div>
+
+      <div style={cardStyle}>
+        <table
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'auto',
+          }}
+        >
+          <thead>
+            <tr>
+              <th style={thStyle({ key: 'stage', label: 'Stage' })}>Stage</th>
+              <th style={thStyle({ key: 'kind', label: 'Kind', fit: true })}>Kind</th>
+              <th style={thStyle({ key: 'op', label: 'Operation', fit: true })}>Operation</th>
+              <th style={thStyle({ key: 'detail', label: 'Details' })}>Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeStageEntries.map((stage, stageIdx) => {
+              const stageId = stage.id;
+              const stageOps = opsByStage.get(stageId) || [];
+              const isCollapsed = collapsedStages.has(stageId);
+              const isStageSelected = selectedNodeId === stageId;
+              const isLastStage = stageIdx === activeStageEntries.length - 1;
+
+              if (isCollapsed) {
+                const isHovered = hoveredKey === stageId && !isStageSelected;
+                return (
+                  <tr
+                    key={stageId}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selectedNodeId === stageId) onClearSelection?.();
+                      else onNodeSelect?.(stageId);
+                    }}
+                    onMouseEnter={() => setHoveredKey(stageId)}
+                    onMouseLeave={() => setHoveredKey(null)}
+                    style={{
+                      cursor: 'pointer',
+                      background: isStageSelected
+                        ? theme.rowSelectedBg
+                        : isHovered
+                          ? theme.headerBg
+                          : theme.cardBg,
+                      boxShadow: isStageSelected ? `inset 2px 0 0 ${theme.primary}` : 'none',
+                      borderBottom: isLastStage ? 'none' : `1px solid ${rowDivider}`,
+                      transition: 'background-color 0.15s ease',
+                    }}
+                  >
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        verticalAlign: 'middle',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          onClick={(e) => toggleStageCollapse(stageId, e)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '4px',
+                            color: theme.textMuted,
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            background: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+                            flexShrink: 0,
+                          }}
+                          title="Expand stage"
+                        >
+                          ▶
+                        </span>
+                        <PrimaryCell>{stage.data?.label || stageId}</PrimaryCell>
+                      </div>
+                    </td>
+                    <td style={{ padding: '8px 12px', verticalAlign: 'middle', width: '1%', whiteSpace: 'nowrap' }}>
+                      <KindBadge kind={stage.data?.kind} />
+                    </td>
+                    <td style={{ padding: '8px 12px', verticalAlign: 'middle', width: '1%', whiteSpace: 'nowrap' }}>
+                      <SecondaryCell>—</SecondaryCell>
+                    </td>
+                    <td style={{ padding: '8px 12px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+                      <SecondaryCell>
+                        {stageOps.length} {stageOps.length === 1 ? 'operation' : 'operations'}
+                      </SecondaryCell>
+                    </td>
+                  </tr>
+                );
+              }
+
+              // Expanded: Render child rows with the first row showing Stage & Kind spanning the group
+              const isAnyStageOpHovered = stageOps.some((o) => o.id === hoveredKey);
+              const isStageGroupHovered = (hoveredKey === stageId || isAnyStageOpHovered);
+
+              // Subtle background for expanded stage block to clearly demarcate boundaries
+              const expandedBaseBg = theme.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.025)'
+                : 'rgba(0, 0, 0, 0.015)';
+
+              return stageOps.map((op, opIdx) => {
+                const isFirstOp = opIdx === 0;
+                const isLastOp = opIdx === stageOps.length - 1;
+                const isOpSelected = selectedNodeId === op.id;
+                const isOpHovered = hoveredKey === op.id;
+                const dimmed =
+                  columnHighlight &&
+                  !isNodeInColumnPath(op.id, columnHighlight) &&
+                  !op.operands?.some((o) => isNodeInColumnPath(o.id, columnHighlight)) &&
+                  !(op.branches || []).some((b) => isNodeInColumnPath(b.tail_id, columnHighlight));
+
+                const opDisplay = toTitleCase(op.opType);
+                const detail =
+                  op.detail ||
+                  (op.opKind === 'union'
+                    ? (op.branches || []).map((b) => `B${b.index + 1}: ${b.label}`).join(' · ') ||
+                      `${op.branchCount || 0} branches`
+                    : formatJoinStepDetail(op));
+
+                const borderTopStyle = (isFirstOp && stageIdx > 0)
+                  ? `1px solid ${theme.border}`
+                  : 'none';
+
+                const borderBottomStyle = (isLastOp && !isLastStage)
+                  ? `1px solid ${theme.border}`
+                  : isLastOp && isLastStage
+                    ? 'none'
+                    : `1px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)'}`;
+
+                // Row background logic:
+                // 1. Specific operation selected: primary row selected color
+                // 2. Stage selected: stage tint
+                // 3. Operation hovered: hover highlight
+                // 4. Base expanded block background: subtle darker/tinted boundary
+                const rowBg = isOpSelected
+                  ? theme.rowSelectedBg
+                  : isOpHovered
+                    ? theme.headerBg
+                    : isStageSelected
+                      ? (theme.mode === 'dark' ? 'rgba(30, 58, 95, 0.18)' : 'rgba(239, 246, 255, 0.45)')
+                      : isStageGroupHovered
+                        ? (theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)')
+                        : expandedBaseBg;
+
+                return (
+                  <tr
+                    key={op.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selectedNodeId === op.id) onClearSelection?.();
+                      else onNodeSelect?.(op.id);
+                    }}
+                    onMouseEnter={() => setHoveredKey(op.id)}
+                    onMouseLeave={() => setHoveredKey(null)}
+                    style={{
+                      cursor: 'pointer',
+                      background: rowBg,
+                      boxShadow: isOpSelected ? `inset 2px 0 0 ${theme.primary}` : 'none',
+                      borderTop: borderTopStyle,
+                      borderBottom: borderBottomStyle,
+                      opacity: dimmed ? 0.4 : 1,
+                      transition: 'background-color 0.15s ease',
+                    }}
+                  >
+                    {isFirstOp ? (
+                      <td
+                        rowSpan={stageOps.length}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedNodeId === stageId) onClearSelection?.();
+                          else onNodeSelect?.(stageId);
+                        }}
+                        onMouseEnter={() => setHoveredKey(stageId)}
+                        onMouseLeave={() => setHoveredKey(null)}
+                        style={{
+                          padding: '8px 12px',
+                          verticalAlign: 'top',
+                          borderTop: isFirstOp && stageIdx > 0 ? `1px solid ${theme.border}` : 'none',
+                          borderBottom: isLastStage ? 'none' : `1px solid ${theme.border}`,
+                          background: isStageSelected
+                            ? theme.rowSelectedBg
+                            : isStageGroupHovered
+                              ? (theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.035)')
+                              : expandedBaseBg,
+                          whiteSpace: 'nowrap',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span
+                            onClick={(e) => toggleStageCollapse(stageId, e)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '4px',
+                              color: theme.textMuted,
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              background: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                              flexShrink: 0,
+                            }}
+                            title="Collapse stage"
+                          >
+                            ▼
+                          </span>
+                          <PrimaryCell>{stage.data?.label || stageId}</PrimaryCell>
+                        </div>
+                      </td>
+                    ) : null}
+
+                    {isFirstOp ? (
+                      <td
+                        rowSpan={stageOps.length}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedNodeId === stageId) onClearSelection?.();
+                          else onNodeSelect?.(stageId);
+                        }}
+                        onMouseEnter={() => setHoveredKey(stageId)}
+                        onMouseLeave={() => setHoveredKey(null)}
+                        style={{
+                          padding: '8px 12px',
+                          verticalAlign: 'top',
+                          borderTop: isFirstOp && stageIdx > 0 ? `1px solid ${theme.border}` : 'none',
+                          borderBottom: isLastStage ? 'none' : `1px solid ${theme.border}`,
+                          background: isStageSelected
+                            ? theme.rowSelectedBg
+                            : isStageGroupHovered
+                              ? (theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.035)')
+                              : expandedBaseBg,
+                          width: '1%',
+                          whiteSpace: 'nowrap',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                      >
+                        <KindBadge kind={stage.data?.kind} />
+                      </td>
+                    ) : null}
+
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        verticalAlign: 'middle',
+                        width: '1%',
+                        whiteSpace: 'nowrap',
+                        borderTop: isFirstOp && stageIdx > 0 ? `1px solid ${theme.border}` : 'none',
+                      }}
+                    >
+                      <PrimaryCell>{opDisplay}</PrimaryCell>
+                    </td>
+
+                    <td
+                      style={{
+                        padding: '8px 12px',
+                        verticalAlign: 'middle',
+                        whiteSpace: 'nowrap',
+                        borderTop: isFirstOp && stageIdx > 0 ? `1px solid ${theme.border}` : 'none',
+                      }}
+                    >
+                      <CodeCell title={detail}>{detail}</CodeCell>
+                    </td>
+                  </tr>
+                );
+              });
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function LineageTableView({
   nodes,
   edges,
   selectedNodeId,
   selectedColumn,
-  expandedStageId,
   tableTab,
   onTableTabChange,
-  showAllOperations,
-  onToggleShowAllOperations,
   onNodeSelect,
   onColumnSelect,
   onClearSelection,
@@ -311,40 +752,48 @@ export default function LineageTableView({
       onNodeSelect(id);
     }
   };
+
   const pipelineQuery = isPipelineQuery(nodes);
   const sourceNodes = getSourceNodes(nodes);
   const pipelineStages = topologicalSortStages(nodes, edges);
   const operations = getJoinOperations(nodes, edges);
   const outputNode = getOutputNode(nodes);
 
+  const activeTab =
+    !pipelineQuery && tableTab === TABLE_TABS.PIPELINE
+      ? TABLE_TABS.OUTPUT
+      : tableTab;
+
+  useEffect(() => {
+    if (tableTab !== activeTab) {
+      onTableTabChange(activeTab);
+    }
+  }, [activeTab, tableTab, onTableTabChange]);
+
   const columnHighlight = useMemo(() => {
     if (!selectedColumn || !selectedNodeId) return null;
     return getColumnLineageHighlight(selectedNodeId, selectedColumn, nodes, edges);
   }, [selectedColumn, selectedNodeId, nodes, edges]);
 
-  const expandedStage = nodes.find((n) => n.id === expandedStageId);
-
-  const tabs = [
-    { id: TABLE_TABS.SOURCES, label: 'Sources' },
-    { id: TABLE_TABS.PIPELINE, label: 'Pipeline' },
-    { id: TABLE_TABS.OPERATIONS, label: 'Operations' },
-    { id: TABLE_TABS.OUTPUT, label: 'Output' },
-  ];
+  const inspector = resolveTableInspector({
+    activeTab,
+    selectedNodeId,
+    selectedColumn,
+    nodes,
+    operations,
+    outputNode,
+  });
 
   const visibleOperations = useMemo(() => {
     let ops = operations;
     if (selectedColumn && columnHighlight) {
       ops = filterOperationsForColumn(ops, columnHighlight);
-    } else if (!showAllOperations && expandedStageId) {
-      ops = filterOperationsForStage(ops, expandedStageId);
     }
     return ops;
   }, [
     operations,
     selectedColumn,
     columnHighlight,
-    showAllOperations,
-    expandedStageId,
   ]);
 
   const sourcesRows = sourceNodes.map((n) => {
@@ -353,6 +802,7 @@ export default function LineageTableView({
     const usedIn = pipelineStages
       .filter((s) => getSourcesUsedInStage(s.id, nodes, edges).includes(n.data?.label || id))
       .map((s) => s.data?.label || s.id);
+    const colCount = n.data?.columns?.length || 0;
 
     return {
       key: id,
@@ -360,15 +810,19 @@ export default function LineageTableView({
       dimmed,
       onClick: () => toggleNodeSelection(id),
       cells: {
-        name: (
-          <span style={{ fontWeight: '600' }}>{n.data?.label || id}</span>
-        ),
+        name: <PrimaryCell>{n.data?.label || id}</PrimaryCell>,
         kind: <KindBadge kind={n.data?.kind} />,
-        qualified: n.data?.qualified_name || '—',
-        columns: (n.data?.columns?.length || 0) > 0
-          ? n.data.columns.join(', ')
-          : '—',
-        usedIn: usedIn.length > 0 ? usedIn.join(', ') : '—',
+        qualified: (
+          <SecondaryCell title={n.data?.qualified_name || ''}>
+            {n.data?.qualified_name}
+          </SecondaryCell>
+        ),
+        columns: <MetaCell>{colCount > 0 ? colCount : null}</MetaCell>,
+        usedIn: (
+          <SecondaryCell title={usedIn.join(', ')}>
+            {usedIn.length ? usedIn.join(', ') : null}
+          </SecondaryCell>
+        ),
       },
     };
   });
@@ -381,49 +835,15 @@ export default function LineageTableView({
 
     return {
       key: id,
-      selected: expandedStageId === id || selectedNodeId === id,
+      selected: selectedNodeId === id,
       dimmed,
       onClick: () => toggleNodeSelection(id),
       cells: {
-        step: index + 1,
-        name: (
-          <span style={{ fontWeight: '600' }}>{n.data?.label || id}</span>
-        ),
+        step: <MetaCell>{index + 1}</MetaCell>,
+        name: <PrimaryCell>{n.data?.label || id}</PrimaryCell>,
         kind: <KindBadge kind={n.data?.kind} />,
-        columns: colCount > 0 ? colCount : '—',
-        ops: summary,
-      },
-    };
-  });
-
-  const operationsRows = visibleOperations.map((op) => {
-    const dimmed =
-      columnHighlight &&
-      !isNodeInColumnPath(op.id, columnHighlight) &&
-      !op.operands.some((o) => isNodeInColumnPath(o.id, columnHighlight)) &&
-      !(op.branches || []).some((b) => isNodeInColumnPath(b.tail_id, columnHighlight));
-
-    const leftLabel =
-      op.opKind === 'union'
-        ? op.branches?.map((b) => `B${b.index + 1}: ${b.label}`).join(', ') || '—'
-        : op.left?.label || '—';
-    const rightLabel = op.opKind === 'union' ? '—' : op.right?.label || '—';
-    const onLabel =
-      op.opKind === 'union'
-        ? `${op.branchCount || op.branches?.length || 0} branches`
-        : op.conditions[0] || '—';
-
-    return {
-      key: op.id,
-      selected: selectedNodeId === op.id,
-      dimmed,
-      onClick: () => onNodeSelect(op.id),
-      cells: {
-        stage: op.stageLabel,
-        op: op.opType,
-        left: leftLabel,
-        right: rightLabel,
-        on: onLabel,
+        columns: <MetaCell>{colCount > 0 ? colCount : null}</MetaCell>,
+        ops: <SecondaryCell title={summary}>{summary}</SecondaryCell>,
       },
     };
   });
@@ -438,34 +858,16 @@ export default function LineageTableView({
       selected: isSelected,
       dimmed: false,
       onClick: () => {
-        if (outputNode) {
-          onColumnSelect(outputNode.id, colName);
-        }
+        if (!outputNode) return;
+        if (isSelected) onClearSelection?.();
+        else onColumnSelect(outputNode.id, colName);
       },
       cells: {
-        column: (
-          <span style={{ fontWeight: '600' }}>{colName}</span>
-        ),
-        sources: getColumnSourcesText(entry),
-        trace: (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (outputNode) onColumnSelect(outputNode.id, colName);
-            }}
-            style={{
-              fontSize: '11px',
-              padding: '4px 8px',
-              border: `1px solid ${theme.primary}`,
-              borderRadius: '4px',
-              background: isSelected ? theme.primary : theme.buttonBg,
-              color: isSelected ? theme.onPrimary : theme.primary,
-              cursor: 'pointer',
-            }}
-          >
-            Trace
-          </button>
+        column: <PrimaryCell>{colName}</PrimaryCell>,
+        sources: (
+          <CodeCell title={(entry.sources || []).join(', ')}>
+            {(entry.sources || []).length ? (entry.sources || []).join(', ') : null}
+          </CodeCell>
         ),
       },
     };
@@ -476,186 +878,72 @@ export default function LineageTableView({
       style={{
         flex: 1,
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
         minHeight: 0,
         background: theme.bg,
       }}
     >
       <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '8px 12px',
-          borderBottom: `1px solid ${theme.border}`,
-          background: theme.toolbarBg,
-        }}
+        style={{ flex: 1, overflow: 'auto', minHeight: 0, minWidth: 0 }}
+        onClick={() => inspector && onClearSelection?.()}
       >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onTableTabChange(tab.id)}
-            style={{
-              padding: '6px 12px',
-              fontSize: '12px',
-              fontWeight: '600',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              background: tableTab === tab.id ? theme.buttonActiveBg : 'transparent',
-              color: tableTab === tab.id ? theme.primary : theme.textMuted,
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-        {pipelineQuery && tableTab === TABLE_TABS.PIPELINE && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontSize: '11px',
-              color: theme.textMuted,
-            }}
-          >
-            Pipeline query — {pipelineStages.length} stages
-          </span>
-        )}
-        {tableTab === TABLE_TABS.OPERATIONS && (
-          <button
-            type="button"
-            onClick={onToggleShowAllOperations}
-            style={{
-              marginLeft: 'auto',
-              fontSize: '11px',
-              padding: '4px 10px',
-              border: `1px solid ${theme.border}`,
-              borderRadius: '6px',
-              background: showAllOperations ? theme.buttonActiveBg : theme.buttonBg,
-              color: showAllOperations ? theme.primary : theme.textMuted,
-              cursor: 'pointer',
-            }}
-          >
-            {showAllOperations ? 'All stages' : 'Current stage only'}
-          </button>
-        )}
-        {selectedColumn && (
-          <span style={{ fontSize: '11px', color: theme.textMuted, marginLeft: '8px' }}>
-            Tracing <strong>{selectedColumn}</strong>
-          </span>
-        )}
-      </div>
-
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        {tableTab === TABLE_TABS.SOURCES && (
+        {activeTab === TABLE_TABS.SOURCES && (
           <DataTable
-            columns={[
-              { key: 'name', label: 'Table' },
-              { key: 'kind', label: 'Kind' },
-              { key: 'qualified', label: 'Qualified name' },
-              { key: 'columns', label: 'Columns' },
-              { key: 'usedIn', label: 'Used in stages' },
-            ]}
+            columns={COL.sources}
             rows={sourcesRows}
             emptyMessage="No source tables in this query."
           />
         )}
 
-        {tableTab === TABLE_TABS.PIPELINE && (
+        {activeTab === TABLE_TABS.PIPELINE && (
           <DataTable
-            columns={[
-              { key: 'step', label: '#' },
-              { key: 'name', label: 'Stage' },
-              { key: 'kind', label: 'Type' },
-              { key: 'columns', label: 'Cols' },
-              { key: 'ops', label: 'Operations' },
-            ]}
+            columns={COL.pipeline}
             rows={pipelineRows}
             emptyMessage="No pipeline stages — output is a simple SELECT."
           />
         )}
 
-        {tableTab === TABLE_TABS.OPERATIONS && (
-          <DataTable
-            columns={[
-              { key: 'stage', label: 'Stage' },
-              { key: 'op', label: 'Operation' },
-              { key: 'left', label: 'Left' },
-              { key: 'right', label: 'Right' },
-              { key: 'on', label: 'Condition' },
-            ]}
-            rows={operationsRows}
-            emptyMessage="No join or union operations in this query."
+        {activeTab === TABLE_TABS.OPERATIONS && (
+          <OperationsTable
+            stages={pipelineStages}
+            operations={visibleOperations}
+            nodes={nodes}
+            selectedNodeId={selectedNodeId}
+            columnHighlight={columnHighlight}
+            onNodeSelect={onNodeSelect}
+            onClearSelection={onClearSelection}
+            emptyMessage="No join, union, or filter operations in this query."
           />
         )}
 
-        {tableTab === TABLE_TABS.OUTPUT && (
+        {activeTab === TABLE_TABS.OUTPUT && (
           <DataTable
-            columns={[
-              { key: 'column', label: 'Output column' },
-              { key: 'sources', label: 'Source refs' },
-              { key: 'trace', label: '' },
-            ]}
+            columns={COL.output}
             rows={outputRows}
             emptyMessage="No output columns — parse a query first."
           />
         )}
       </div>
 
-      {(tableTab === TABLE_TABS.PIPELINE && expandedStage) && (
-          <StageDetailPanel
-            stageNode={expandedStage}
-            operations={operations}
+      <InspectorRail model={inspector}>
+        {(held) => (
+          <SelectionInspector
+            model={held}
             nodes={nodes}
             edges={edges}
-            selectedColumn={selectedColumn}
+            operations={operations}
             columnHighlight={columnHighlight}
+            selectedColumn={selectedColumn}
+            onColumnClick={
+              held.node
+                ? (col) => onColumnSelect(held.node.id, col)
+                : undefined
+            }
+            onNodeSelect={onNodeSelect}
             onClear={onClearSelection}
           />
         )}
-
-      {tableTab === TABLE_TABS.SOURCES && selectedNodeId && (
-        (() => {
-          const sourceNode = nodes.find((n) => n.id === selectedNodeId);
-          if (!sourceNode || !SOURCE_KINDS.has(sourceNode.data?.kind)) return null;
-          const cols = sourceNode.data?.columns || [];
-          return (
-            <div
-              style={{
-                borderTop: `1px solid ${theme.border}`,
-                background: theme.headerBg,
-                padding: '12px 16px',
-              }}
-            >
-              <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '8px' }}>
-                {sourceNode.data?.label || selectedNodeId}
-              </div>
-              {cols.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {cols.map((col) => (
-                    <span
-                      key={col}
-                      style={{
-                        fontSize: '11px',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        background: theme.cardBg,
-                        border: `1px solid ${theme.border}`,
-                      }}
-                    >
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span style={{ fontSize: '12px', color: theme.textMuted }}>
-                  No column list from parse — catalog enrichment may add columns later.
-                </span>
-              )}
-            </div>
-          );
-        })()
-      )}
+      </InspectorRail>
     </div>
   );
 }
