@@ -156,10 +156,24 @@ The UI uses same-origin API calls in this mode (`VITE_API_URL` is empty at build
 
 For local dev with hot reload, use sections 1 and 2 — Docker is not required.
 
-### 4. Run tests
+### 4. Run tests & benchmarks
 
+**Unit Tests:**
 ```bash
+# Backend test suite (40+ test cases)
 pytest
+
+# Frontend test suite (60+ Vitest unit tests)
+cd sql-visualizer-ui && npm test
+```
+
+**Performance Micro-Benchmarks:**
+```bash
+# Backend benchmarks (SQLGlot parser, export serialization & API throughput)
+pytest backend/tests/test_benchmark.py -s
+
+# Frontend benchmarks (Dagre layout, column lineage BFS, & state throughput)
+cd sql-visualizer-ui && npm run benchmark
 ```
 
 ---
