@@ -9,13 +9,15 @@ export function useKeyboardShortcuts({
   onFocusDownstream,
   onLayoutTB,
   onLayoutLR,
-  onLayoutRadial,
   onToggleDiff,
   onToggleStudioMode,
   onToggleZen,
+  onViewGraph,
+  onViewTable,
   enabled = true,
   zenMode = false,
   studioMode = 'author',
+  canSwitchView = false,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -34,6 +36,9 @@ export function useKeyboardShortcuts({
       }
 
       if (isInput && e.key !== 'Escape') return;
+
+      // Let the browser keep Cmd/Ctrl shortcuts (Cmd+R refresh, Cmd+F find, etc.).
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       switch (e.key) {
         case 'f':
@@ -69,6 +74,18 @@ export function useKeyboardShortcuts({
             onToggleStudioMode?.();
           }
           break;
+        case 'g':
+          if (!isInput && canSwitchView) {
+            e.preventDefault();
+            onViewGraph?.();
+          }
+          break;
+        case 't':
+          if (!isInput && canSwitchView) {
+            e.preventDefault();
+            onViewTable?.();
+          }
+          break;
         case 'z':
           if (!isInput && studioMode === 'explore') {
             e.preventDefault();
@@ -80,9 +97,6 @@ export function useKeyboardShortcuts({
           break;
         case '2':
           if (!isInput) onLayoutLR?.();
-          break;
-        case '3':
-          if (!isInput) onLayoutRadial?.();
           break;
         case '?':
           if (!isInput) onToggleDiff?.();
@@ -106,9 +120,11 @@ export function useKeyboardShortcuts({
     onFocusDownstream,
     onLayoutTB,
     onLayoutLR,
-    onLayoutRadial,
     onToggleDiff,
     onToggleStudioMode,
     onToggleZen,
+    onViewGraph,
+    onViewTable,
+    canSwitchView,
   ]);
 }

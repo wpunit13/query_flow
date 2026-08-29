@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { useNodesState, useEdgesState } from '@xyflow/react';
 import { parseSql } from '../api/lineageClient';
 import { DEFAULT_DIALECT, detectDialect, fetchDialects } from '../api/dialectClient';
@@ -10,11 +10,14 @@ import {
   LAYOUT_MODES,
   applyVisibilityFilter,
   ensureNodePositions,
+  adjustLayoutForExpandedToggle,
+  getDownstreamNodeIds,
 } from '../utils/dagreLayout';
 import { getConnectedElements } from '../utils/graphVisibility';
 import {
   getBreadcrumbPath,
   getColumnLineageHighlight,
+  getStageBreadcrumbPath,
   getBranchFilterVisibleIds,
   getUpstreamNodes,
   getDownstreamNodes,
@@ -26,27 +29,110 @@ import {
 } from '../utils/graphDiff';
 import { computeSearchMatches, getSearchVisibilityIds } from '../utils/searchGraph';
 import { getNodeDimensions } from '../utils/dagreLayout';
+import {
+  buildClientExportPayload,
+  downloadCsvFromLineage,
+  downloadGraphPdf,
+  downloadGraphPng,
+  downloadGraphSvg,
+  downloadJsonExport,
+  downloadOpenLineageExport,
+} from '../utils/exportGraph';
 
-const DEFAULT_SQL =
-  'WITH cte1 AS (SELECT id, name FROM users JOIN orders ON users.id = orders.user_id) SELECT id FROM cte1';
+import {
+  getDefaultExpandedStageId,
+  getDefaultTableTab,
+  VIEW_MODES,
+  TABLE_TABS,
+  isPipelineQuery,
+} from '../utils/lineageTableModel';
+import {
+  isLargeLineageGraph,
+  buildOverviewToastMessage,
+} from '../constants/overviewMode';
+import { GRAPH_DETAIL_MODES } from '../constants/graphDetailMode';
+import {
+  isCompoundGraphEligible,
+  mapHighlightToCompoundDisplay,
+  isCompoundDisplayEdgeHighlighted,
+  fromStageGroupId,
+  toStageGroupId,
+  findStageContainingNode,
+} from '../utils/compoundGraphModel';
+import { buildCompoundGraphDisplay } from '../utils/compoundGraphLayout';
+import {
+  persistLineageSession,
+  readLineageParseResult,
+  shouldAutoRestore,
+  readInitialSql,
+  readInitialStudioMode,
+  readInitialTableTab,
+  readInitialViewMode,
+  readLineageSessionMeta,
+  readStoredSql,
+  resolveGraphDetailModeFromSession,
+  shouldPreferTableOverview,
+} from '../utils/lineageSession';
 
-const HIGHLIGHT_EDGE_STYLE = {
-  stroke: theme.primary,
-  strokeWidth: 3,
-  opacity: 1,
-};
+const STAGE_KINDS = new Set([
+  'cte',
+  'subquery',
+  'final_output',
+  'view',
+  'insert_target',
+  'merge_target',
+]);
 
-const DIM_EDGE_STYLE = {
-  stroke: '#e2e8f0',
-  strokeWidth: 1,
-  opacity: 0.2,
-};
+const GRAPH_UI_STORAGE_KEY = 'ls_graph_ui';
 
-const DEFAULT_EDGE_STYLE = {
-  stroke: '#94a3b8',
-  strokeWidth: 2,
-  opacity: 1,
-};
+function readGraphUiState() {
+  try {
+    return JSON.parse(sessionStorage.getItem(GRAPH_UI_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function persistGraphUiState(patch) {
+  try {
+    const next = { ...readGraphUiState(), ...patch };
+    sessionStorage.setItem(GRAPH_UI_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode / blocked storage */
+  }
+}
+
+function resolveGraphDetailMode(nodes) {
+  if (!nodes?.length || !isCompoundGraphEligible(nodes)) {
+    return GRAPH_DETAIL_MODES.FLAT;
+  }
+  return resolveGraphDetailModeFromSession(true);
+}
+
+function readInitialDialect() {
+  const meta = readLineageSessionMeta();
+  return meta?.dialect || DEFAULT_DIALECT;
+}
+
+function readInitialLayoutMode() {
+  const stored = readGraphUiState().layoutMode;
+  if (stored === LAYOUT_MODES.LR || stored === LAYOUT_MODES.TB) {
+    return stored;
+  }
+  return LAYOUT_MODES.TB;
+}
+
+function getHighlightEdgeStyle() {
+  return { stroke: theme.primary, strokeWidth: 3, opacity: 1 };
+}
+
+function getDimEdgeStyle() {
+  return { stroke: theme.edgeStroke, strokeWidth: 1.5, opacity: 0.45 };
+}
+
+function getDefaultEdgeStyle() {
+  return { stroke: theme.edgeStroke, strokeWidth: 2.75, opacity: 1 };
+}
 
 const FALLBACK_DIALECTS = [
   { id: 'bigquery', label: 'BigQuery', limitations: '' },
@@ -57,28 +143,28 @@ const FALLBACK_DIALECTS = [
   { id: 'duckdb', label: 'DuckDB', limitations: '' },
 ];
 
-export function useLineageGraph(fitGraphToView) {
+export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [baseNodes, setBaseNodes] = useState([]);
   const [baseEdges, setBaseEdges] = useState([]);
 
-  const [sql, setSql] = useState(DEFAULT_SQL);
-  const [loading, setLoading] = useState(false);
+  const [sql, setSql] = useState(readInitialSql);
+  const [loading, setLoading] = useState(() => shouldAutoRestore());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchIndex, setSearchIndex] = useState(0);
   const [rfInstance, setRfInstance] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [parseError, setParseError] = useState(null);
-  const [dialect, setDialect] = useState(DEFAULT_DIALECT);
+  const [dialect, setDialect] = useState(readInitialDialect);
   const [dialects, setDialects] = useState(FALLBACK_DIALECTS);
   const [detectingDialect, setDetectingDialect] = useState(false);
   const [detectHint, setDetectHint] = useState('');
-  const [studioMode, setStudioMode] = useState('author');
+  const [studioMode, setStudioMode] = useState(readInitialStudioMode);
   const [zenMode, setZenMode] = useState(false);
 
-  const [layoutMode, setLayoutMode] = useState(LAYOUT_MODES.TB);
+  const [layoutMode, setLayoutMode] = useState(readInitialLayoutMode);
   const [branchFilter, setBranchFilter] = useState('');
   const [focusMode, setFocusMode] = useState(null);
   const [selectedNodeId, setSelectedNodeId] = useState(null);
@@ -91,10 +177,27 @@ export function useLineageGraph(fitGraphToView) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [filterNoMatches, setFilterNoMatches] = useState(false);
 
+  const [viewMode, setViewMode] = useState(readInitialViewMode);
+  const [tableTab, setTableTab] = useState(readInitialTableTab);
+  const [expandedStageId, setExpandedStageId] = useState(null);
+  const [showAllOperations, setShowAllOperations] = useState(false);
+  const [overviewToast, setOverviewToast] = useState(null);
+  const [graphDetailMode, setGraphDetailMode] = useState(GRAPH_DETAIL_MODES.FLAT);
+  const graphDetailModeRef = useRef(GRAPH_DETAIL_MODES.FLAT);
+  const [compoundExpandedStageIds, setCompoundExpandedStageIds] = useState([]);
+
+  const [lastParseResult, setLastParseResult] = useState(null);
+  const embedBootstrapped = useRef(false);
   const searchInputRef = useRef(null);
   const sqlEditorRef = useRef(null);
-  const sqlRef = useRef(DEFAULT_SQL);
+  const sqlRef = useRef(readInitialSql());
   const [lastParsedSql, setLastParsedSql] = useState(null);
+  const handleParseSqlRef = useRef(null);
+  const applyParsedLineageRef = useRef(null);
+  const parseGenerationRef = useRef(0);
+  const restoredFromCacheRef = useRef(false);
+
+  graphDetailModeRef.current = graphDetailMode;
 
   useEffect(() => {
     fetchDialects()
@@ -152,6 +255,41 @@ export function useLineageGraph(fitGraphToView) {
         displayEdges = focused.edges;
       }
 
+      const detailMode =
+        overrides.graphDetailMode ??
+        (sourceNodes.length
+          ? resolveGraphDetailMode(sourceNodes)
+          : graphDetailModeRef.current);
+      const expandedStages = overrides.compoundExpandedStages
+        ? overrides.compoundExpandedStages
+        : new Set(compoundExpandedStageIds);
+
+      const useCompound =
+        detailMode === GRAPH_DETAIL_MODES.COMPOUND &&
+        isCompoundGraphEligible(sourceNodes);
+
+      if (useCompound) {
+        const compound = buildCompoundGraphDisplay({
+          nodes: displayNodes,
+          edges: displayEdges,
+          layoutMode: mode,
+          expandedStages,
+        });
+        setNodes(
+          ensureNodePositions(compound.nodes).map((n) => ({
+            ...n,
+            data: {
+              ...n.data,
+              isSearchMatch: false,
+              isActiveSearchMatch: false,
+              searchQuery: '',
+            },
+          }))
+        );
+        setEdges(compound.edges);
+        return;
+      }
+
       setNodes(
         ensureNodePositions(displayNodes).map((n) => ({
           ...n,
@@ -172,6 +310,8 @@ export function useLineageGraph(fitGraphToView) {
       focusMode,
       selectedNodeId,
       layoutMode,
+      graphDetailMode,
+      compoundExpandedStageIds,
       setNodes,
       setEdges,
     ]
@@ -179,9 +319,24 @@ export function useLineageGraph(fitGraphToView) {
 
   const applyGraphHighlight = useCallback(
     (highlightNodes, highlightEdges, sourceNodeIds = null, columnName = null) => {
+      const useCompound =
+        graphDetailModeRef.current === GRAPH_DETAIL_MODES.COMPOUND &&
+        isCompoundGraphEligible(baseNodes);
+
+      const displayNodeIds = useCompound
+        ? mapHighlightToCompoundDisplay(
+            highlightNodes,
+            baseNodes,
+            baseEdges,
+            new Set(compoundExpandedStageIds)
+          )
+        : null;
+
       setNodes((nds) =>
         nds.map((n) => {
-          const inPath = highlightNodes.has(n.id);
+          const inPath = useCompound
+            ? displayNodeIds.has(n.id)
+            : highlightNodes.has(n.id);
           const isSource = sourceNodeIds?.has(n.id);
           return {
             ...n,
@@ -198,18 +353,30 @@ export function useLineageGraph(fitGraphToView) {
           };
         })
       );
+
       setEdges((eds) =>
-        eds.map((e) => ({
-          ...e,
-          animated: highlightEdges.has(e.id),
-          style: {
-            ...e.style,
-            ...(highlightEdges.has(e.id) ? HIGHLIGHT_EDGE_STYLE : DIM_EDGE_STYLE),
-          },
-        }))
+        eds.map((e) => {
+          const inPath = useCompound
+            ? isCompoundDisplayEdgeHighlighted(e, highlightEdges, displayNodeIds)
+            : highlightEdges.has(e.id);
+          return {
+            ...e,
+            animated: inPath,
+            style: {
+              ...e.style,
+              ...(inPath ? getHighlightEdgeStyle() : getDimEdgeStyle()),
+            },
+          };
+        })
       );
     },
-    [setNodes, setEdges]
+    [
+      setNodes,
+      setEdges,
+      baseNodes,
+      baseEdges,
+      compoundExpandedStageIds,
+    ]
   );
 
   const clearHighlight = useCallback(() => {
@@ -229,7 +396,7 @@ export function useLineageGraph(fitGraphToView) {
       eds.map((e) => ({
         ...e,
         animated: false,
-        style: { ...e.style, ...DEFAULT_EDGE_STYLE },
+        style: { ...e.style, ...getDefaultEdgeStyle() },
       }))
     );
   }, [setNodes, setEdges]);
@@ -237,14 +404,115 @@ export function useLineageGraph(fitGraphToView) {
   /** Always read live editor text — React state can lag behind paste/typing. */
   const getSqlForAction = () => {
     const fromEditor = sqlEditorRef.current?.getValue?.();
-    if (typeof fromEditor === 'string') {
+    if (typeof fromEditor === 'string' && fromEditor.trim().length > 0) {
       return fromEditor;
     }
     return sqlRef.current;
   };
 
-  const handleParseSql = async () => {
-    const sqlToParse = getSqlForAction();
+  const applyParsedLineage = (data, sqlToParse, { persist = true, applyDiff = true } = {}) => {
+    setLastParseResult(data);
+    setWarnings(data.warnings || []);
+
+    const styledEdges = styleApiEdges(data.edges);
+    const initializedNodes = initializeApiNodes(data.nodes);
+
+    let diff = null;
+    if (applyDiff && diffMode && baselineGraph) {
+      diff = computeGraphDiff(baselineGraph, {
+        nodes: initializedNodes,
+        edges: styledEdges,
+      });
+      setDiffSummary({
+        addedNodes: diff.addedNodes.size,
+        removedNodes: diff.removedNodes.size,
+        addedEdges: diff.addedEdges.size,
+        removedEdges: diff.removedEdges.size,
+      });
+    } else if (applyDiff && diffMode) {
+      setBaselineGraph({ nodes: initializedNodes, edges: styledEdges });
+      setDiffSummary(null);
+    }
+
+    const diffNodes = diff ? applyDiffToNodes(initializedNodes, diff) : initializedNodes;
+    let diffEdges = diff ? applyDiffToEdges(styledEdges, diff) : styledEdges;
+    if (diff) {
+      diffEdges = diffEdges.map((e) =>
+        e.data?.diffStatus === 'added'
+          ? { ...e, style: { ...e.style, stroke: '#10b981', strokeWidth: 3 } }
+          : e
+      );
+    }
+
+    const nodeCount = data.stats?.node_count ?? initializedNodes.length;
+    const edgeCount = data.stats?.edge_count ?? styledEdges.length;
+    const useTableOverview = isLargeLineageGraph(nodeCount);
+    const nextGraphDetailMode = resolveGraphDetailMode(initializedNodes);
+    const overviewTableTab = isPipelineQuery(initializedNodes)
+      ? TABLE_TABS.PIPELINE
+      : getDefaultTableTab(initializedNodes);
+
+    setGraphDetailMode(nextGraphDetailMode);
+    graphDetailModeRef.current = nextGraphDetailMode;
+
+    if (persist) {
+      const sessionSaved = persistLineageSession({
+        sql: sqlToParse,
+        dialect,
+        preferTableOverview: useTableOverview,
+        tableTab: useTableOverview ? overviewTableTab : readLineageSessionMeta()?.tableTab,
+        pendingRestore: true,
+        userChoseFlat: false,
+        parseResult: data,
+      });
+      if (!sessionSaved) {
+        console.warn(
+          '[lineage] Could not save session to browser storage — refresh will not restore this query.'
+        );
+      }
+    }
+
+    const laidOut = layoutFullGraph(diffNodes, diffEdges, layoutMode);
+    applyDisplayFromBase(layoutMode, null, {
+      baseNodes: laidOut.nodes,
+      baseEdges: laidOut.edges,
+      graphDetailMode: nextGraphDetailMode,
+    });
+
+    setNodes((nds) =>
+      nds.map((n) => ({
+        ...n,
+        style: { opacity: 1, transition: 'opacity 0.3s ease' },
+      }))
+    );
+
+    if (useTableOverview) {
+      setViewMode(VIEW_MODES.TABLE);
+      setTableTab(overviewTableTab);
+      setOverviewToast(buildOverviewToastMessage(nodeCount, edgeCount));
+    } else {
+      setViewMode(VIEW_MODES.GRAPH);
+      setOverviewToast(null);
+      fitGraphToView();
+    }
+
+    setLastParsedSql(sqlToParse);
+    setExpandedStageId(getDefaultExpandedStageId(initializedNodes));
+    setStudioMode('explore');
+    setZenMode(false);
+    setLoading(false);
+  };
+
+  applyParsedLineageRef.current = applyParsedLineage;
+
+  const handleParseSql = async (sqlOverride) => {
+    const parseGeneration = ++parseGenerationRef.current;
+    const isStaleParse = () => parseGeneration !== parseGenerationRef.current;
+
+    const sqlToParse =
+      typeof sqlOverride === 'string' && sqlOverride.trim().length > 0
+        ? sqlOverride
+        : getSqlForAction();
     if (sqlToParse !== sqlRef.current) {
       sqlRef.current = sqlToParse;
       setSql(sqlToParse);
@@ -259,58 +527,17 @@ export function useLineageGraph(fitGraphToView) {
     setSelectedColumn(null);
     setBreadcrumb([]);
     setFocusMode(null);
+    setExpandedStageId(null);
+    setShowAllOperations(false);
+    setOverviewToast(null);
+    setCompoundExpandedStageIds([]);
 
     try {
       const data = await parseSql(sqlToParse, dialect);
-      setWarnings(data.warnings || []);
-
-      const styledEdges = styleApiEdges(data.edges);
-      const initializedNodes = initializeApiNodes(data.nodes);
-
-      let diff = null;
-      if (diffMode && baselineGraph) {
-        diff = computeGraphDiff(baselineGraph, {
-          nodes: initializedNodes,
-          edges: styledEdges,
-        });
-        setDiffSummary({
-          addedNodes: diff.addedNodes.size,
-          removedNodes: diff.removedNodes.size,
-          addedEdges: diff.addedEdges.size,
-          removedEdges: diff.removedEdges.size,
-        });
-      } else if (diffMode) {
-        setBaselineGraph({ nodes: initializedNodes, edges: styledEdges });
-        setDiffSummary(null);
-      }
-
-      const diffNodes = diff ? applyDiffToNodes(initializedNodes, diff) : initializedNodes;
-      let diffEdges = diff ? applyDiffToEdges(styledEdges, diff) : styledEdges;
-      if (diff) {
-        diffEdges = diffEdges.map((e) =>
-          e.data?.diffStatus === 'added'
-            ? { ...e, style: { ...e.style, stroke: '#10b981', strokeWidth: 3 } }
-            : e
-        );
-      }
-
-      const laidOut = layoutFullGraph(diffNodes, diffEdges, layoutMode);
-      applyDisplayFromBase(layoutMode, null, {
-        baseNodes: laidOut.nodes,
-        baseEdges: laidOut.edges,
-      });
-
-      setNodes((nds) =>
-        nds.map((n) => ({
-          ...n,
-          style: { opacity: 1, transition: 'opacity 0.3s ease' },
-        }))
-      );
-      fitGraphToView();
-      setLastParsedSql(sqlToParse);
-      setStudioMode('explore');
-      setZenMode(false);
+      if (isStaleParse()) return;
+      applyParsedLineage(data, sqlToParse);
     } catch (error) {
+      if (isStaleParse()) return;
       setStudioMode('author');
       setZenMode(false);
       setWarnings([]);
@@ -333,10 +560,13 @@ export function useLineageGraph(fitGraphToView) {
           ],
         });
       }
+      if (!isStaleParse()) {
+        setLoading(false);
+      }
     }
-
-    setLoading(false);
   };
+
+  handleParseSqlRef.current = handleParseSql;
 
   const handleDismissParseError = () => setParseError(null);
 
@@ -390,6 +620,15 @@ export function useLineageGraph(fitGraphToView) {
     setSelectedColumn(null);
     setBreadcrumb([]);
     setDiffSummary(null);
+    setLastParseResult(null);
+    setViewMode(VIEW_MODES.GRAPH);
+    setTableTab(TABLE_TABS.SOURCES);
+    setExpandedStageId(null);
+    setShowAllOperations(false);
+    setOverviewToast(null);
+    setGraphDetailMode(GRAPH_DETAIL_MODES.FLAT);
+    graphDetailModeRef.current = GRAPH_DETAIL_MODES.FLAT;
+    setCompoundExpandedStageIds([]);
     if (diffMode) setBaselineGraph(null);
 
     const resetNodes = baseNodes.map((n) => ({
@@ -399,6 +638,7 @@ export function useLineageGraph(fitGraphToView) {
       data: {
         ...n.data,
         collapsed: false,
+        expanded: false,
         isLineageHighlight: false,
         isColumnSource: false,
         highlightedColumn: null,
@@ -409,19 +649,21 @@ export function useLineageGraph(fitGraphToView) {
       ...e,
       hidden: false,
       animated: false,
-      style: { ...DEFAULT_EDGE_STYLE, transition: 'all 0.3s ease' },
+      style: { ...getDefaultEdgeStyle(), transition: 'all 0.3s ease' },
     }));
 
     const laidOut = layoutFullGraph(resetNodes, resetEdges, layoutMode);
     applyDisplayFromBase(layoutMode, null, {
       baseNodes: laidOut.nodes,
       baseEdges: laidOut.edges,
+      graphDetailMode: GRAPH_DETAIL_MODES.FLAT,
     });
     fitGraphToView();
   };
 
   const handleLayoutChange = (mode) => {
     setLayoutMode(mode);
+    persistGraphUiState({ layoutMode: mode });
     const laidOut = layoutFullGraph(baseNodes, baseEdges, mode);
     applyDisplayFromBase(mode, focusMode, {
       baseNodes: laidOut.nodes,
@@ -558,47 +800,254 @@ export function useLineageGraph(fitGraphToView) {
     }
   };
 
+  const selectNodeById = useCallback(
+    (nodeId) => {
+      const node = baseNodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      setSelectedNodeId(nodeId);
+      setSelectedColumn(null);
+      setBreadcrumb(getStageBreadcrumbPath(nodeId, baseNodes, baseEdges));
+      if (STAGE_KINDS.has(node.data?.kind)) {
+        setExpandedStageId(nodeId);
+      }
+      if (viewMode === VIEW_MODES.GRAPH) {
+        const { connectedNodes, connectedEdges } = getConnectedElements(
+          nodeId,
+          baseEdges
+        );
+        applyGraphHighlight(connectedNodes, connectedEdges);
+      }
+    },
+    [baseNodes, baseEdges, viewMode, applyGraphHighlight]
+  );
+
   const selectNode = useCallback(
     (node) => {
       if (node.hidden) return;
-      setSelectedNodeId(node.id);
-      setSelectedColumn(null);
-      setBreadcrumb(getBreadcrumbPath(node.id, nodes, edges));
-
-      const { connectedNodes, connectedEdges } = getConnectedElements(node.id, edges);
-      applyGraphHighlight(connectedNodes, connectedEdges);
+      selectNodeById(node.id);
     },
-    [nodes, edges, applyGraphHighlight]
+    [selectNodeById]
   );
 
   const onNodeClick = useCallback(
-    (_event, node) => selectNode(node),
-    [selectNode]
+    (_event, node) => {
+      const stageId = fromStageGroupId(node.id);
+      if (stageId) {
+        selectNodeById(stageId);
+        return;
+      }
+      selectNode(node);
+    },
+    [selectNode, selectNodeById]
   );
 
   const onColumnSelect = useCallback(
     (nodeId, columnName) => {
       setSelectedNodeId(nodeId);
       setSelectedColumn(columnName);
-      setBreadcrumb(getBreadcrumbPath(nodeId, nodes, edges));
+      setBreadcrumb(getStageBreadcrumbPath(nodeId, baseNodes, baseEdges));
+      setExpandedStageId(nodeId);
 
-      const { upstreamNodes, upstreamEdges, sourceNodeIds } = getColumnLineageHighlight(
-        nodeId,
-        columnName,
-        nodes,
-        edges
-      );
-      applyGraphHighlight(upstreamNodes, upstreamEdges, sourceNodeIds, columnName);
+      const { upstreamNodes, upstreamEdges, sourceNodeIds } =
+        getColumnLineageHighlight(nodeId, columnName, baseNodes, baseEdges);
+
+      if (viewMode === VIEW_MODES.GRAPH) {
+        applyGraphHighlight(
+          upstreamNodes,
+          upstreamEdges,
+          sourceNodeIds,
+          columnName
+        );
+      }
     },
-    [nodes, edges, applyGraphHighlight]
+    [baseNodes, baseEdges, viewMode, applyGraphHighlight]
   );
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
     setSelectedColumn(null);
+    setExpandedStageId(null);
     setBreadcrumb([]);
     clearHighlight();
   }, [clearHighlight]);
+
+  const clearTableSelection = useCallback(() => {
+    onPaneClick();
+  }, [onPaneClick]);
+
+  const handleStageExpand = useCallback((stageId) => {
+    setExpandedStageId(stageId);
+  }, []);
+
+  const handleCompoundStageToggle = useCallback(
+    (stageId) => {
+      const viewport = rfInstance?.getViewport?.();
+      const next = new Set(compoundExpandedStageIds);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
+      const nextIds = [...next];
+      setCompoundExpandedStageIds(nextIds);
+
+      applyDisplayFromBase(layoutMode, focusMode, {
+        compoundExpandedStages: next,
+        graphDetailMode: GRAPH_DETAIL_MODES.COMPOUND,
+      });
+      setTimeout(() => {
+        if (rfInstance) {
+          rfInstance.updateNodeInternals?.(toStageGroupId(stageId));
+          baseNodes.forEach((n) => {
+            if (STAGE_KINDS.has(n.data?.kind)) {
+              rfInstance.updateNodeInternals?.(toStageGroupId(n.id));
+            }
+          });
+          if (viewport) {
+            rfInstance.setViewport(viewport, { duration: 0 });
+          }
+        }
+      }, 50);
+    },
+    [
+      compoundExpandedStageIds,
+      layoutMode,
+      focusMode,
+      applyDisplayFromBase,
+      rfInstance,
+      baseNodes,
+    ]
+  );
+
+  const handleToggleGraphDetail = useCallback(() => {
+    const next =
+      graphDetailMode === GRAPH_DETAIL_MODES.COMPOUND
+        ? GRAPH_DETAIL_MODES.FLAT
+        : GRAPH_DETAIL_MODES.COMPOUND;
+    setGraphDetailMode(next);
+    graphDetailModeRef.current = next;
+    persistGraphUiState({
+      userChoseFlat: next === GRAPH_DETAIL_MODES.FLAT,
+    });
+    const meta = readLineageSessionMeta();
+    persistLineageSession({
+      sql: readStoredSql() || sqlRef.current,
+      dialect,
+      preferTableOverview:
+        meta?.preferTableOverview ??
+        shouldPreferTableOverview(meta, readStoredSql() || sqlRef.current),
+      tableTab: meta?.tableTab ?? readInitialTableTab(),
+      userChoseFlat: next === GRAPH_DETAIL_MODES.FLAT,
+    });
+    applyDisplayFromBase(layoutMode, focusMode, { graphDetailMode: next });
+    setTimeout(() => fitGraphToView(), 80);
+  }, [graphDetailMode, layoutMode, focusMode, applyDisplayFromBase, fitGraphToView]);
+
+  const handleViewModeChange = useCallback(
+    (mode) => {
+      if (mode === VIEW_MODES.TABLE) {
+        setZenMode(false);
+      }
+      setViewMode(mode);
+      if (mode === VIEW_MODES.GRAPH) {
+        const detailMode = resolveGraphDetailMode(baseNodes);
+        setGraphDetailMode(detailMode);
+        graphDetailModeRef.current = detailMode;
+        applyDisplayFromBase(layoutMode, focusMode, {
+          graphDetailMode: detailMode,
+        });
+        if (selectedNodeId) {
+          if (selectedColumn) {
+            const { upstreamNodes, upstreamEdges, sourceNodeIds } =
+              getColumnLineageHighlight(
+                selectedNodeId,
+                selectedColumn,
+                baseNodes,
+                baseEdges
+              );
+            applyGraphHighlight(
+              upstreamNodes,
+              upstreamEdges,
+              sourceNodeIds,
+              selectedColumn
+            );
+          } else {
+            const { connectedNodes, connectedEdges } = getConnectedElements(
+              selectedNodeId,
+              baseEdges
+            );
+            applyGraphHighlight(connectedNodes, connectedEdges);
+          }
+        }
+        setTimeout(() => fitGraphToView(), 80);
+      }
+    },
+    [
+      selectedNodeId,
+      selectedColumn,
+      baseNodes,
+      baseEdges,
+      layoutMode,
+      focusMode,
+      applyDisplayFromBase,
+      applyGraphHighlight,
+      fitGraphToView,
+    ]
+  );
+
+  const handleToggleShowAllOperations = useCallback(() => {
+    setShowAllOperations((prev) => !prev);
+  }, []);
+
+  const onNodeExpandedToggle = useCallback(
+    (nodeId) => {
+      if (!baseNodes.length) return;
+
+      const inCompound =
+        graphDetailModeRef.current === GRAPH_DETAIL_MODES.COMPOUND &&
+        isCompoundGraphEligible(baseNodes);
+
+      const layoutedNodes = inCompound
+        ? baseNodes.map((n) =>
+            n.id === nodeId
+              ? { ...n, data: { ...n.data, expanded: !n.data?.expanded } }
+              : n
+          )
+        : adjustLayoutForExpandedToggle(
+            baseNodes,
+            baseEdges,
+            nodeId,
+            layoutMode
+          );
+
+      setBaseNodes(layoutedNodes);
+      applyDisplayFromBase(layoutMode, focusMode, {
+        baseNodes: layoutedNodes,
+        baseEdges,
+        graphDetailMode: graphDetailModeRef.current,
+        compoundExpandedStages: new Set(compoundExpandedStageIds),
+      });
+
+      const ownerStage = findStageContainingNode(nodeId, layoutedNodes, baseEdges);
+      setTimeout(() => {
+        rfInstance?.updateNodeInternals?.(nodeId);
+        if (ownerStage) {
+          rfInstance?.updateNodeInternals?.(toStageGroupId(ownerStage));
+        }
+        if (!inCompound) {
+          getDownstreamNodeIds(nodeId, baseEdges).forEach((id) => {
+            rfInstance?.updateNodeInternals?.(id);
+          });
+        }
+      }, 50);
+    },
+    [
+      baseNodes,
+      baseEdges,
+      layoutMode,
+      focusMode,
+      applyDisplayFromBase,
+      rfInstance,
+      compoundExpandedStageIds,
+    ]
+  );
 
   const handleInit = (instance) => {
     setRfInstance(instance);
@@ -641,6 +1090,111 @@ export function useLineageGraph(fitGraphToView) {
     handleBranchFilterChange(branchFilter);
   };
 
+  const handleExportPng = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphPng(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportSvg = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphSvg(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!rfInstance) throw new Error('Graph not ready — render a query first');
+    await downloadGraphPdf(rfInstance);
+  }, [rfInstance]);
+
+  const handleExportJson = useCallback(() => {
+    if (!lastParseResult) throw new Error('No lineage data — render a query first');
+    const payload = buildClientExportPayload(
+      lastParseResult,
+      getSqlForAction(),
+      dialect
+    );
+    downloadJsonExport(payload);
+  }, [lastParseResult, dialect]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!lastParseResult) throw new Error('No lineage data — render a query first');
+    downloadCsvFromLineage(lastParseResult);
+  }, [lastParseResult]);
+
+  const handleExportOpenLineage = useCallback(async () => {
+    const sqlToExport = getSqlForAction();
+    if (!sqlToExport?.trim()) throw new Error('No SQL to export');
+    await downloadOpenLineageExport(sqlToExport, dialect);
+  }, [dialect]);
+
+  useLayoutEffect(() => {
+    if (embedOptions?.embed) return;
+
+    const cached = readLineageParseResult();
+    const storedSql = readStoredSql();
+    if (cached?.nodes && storedSql?.trim()) {
+      restoredFromCacheRef.current = true;
+      sqlRef.current = storedSql;
+      setSql(storedSql);
+      const meta = readLineageSessionMeta();
+      if (meta?.dialect) setDialect(meta.dialect);
+      applyParsedLineageRef.current?.(cached, storedSql, {
+        persist: false,
+        applyDiff: false,
+      });
+      return;
+    }
+
+    if (!shouldAutoRestore()) return;
+
+    const meta = readLineageSessionMeta();
+    if (shouldPreferTableOverview(meta, storedSql)) {
+      setViewMode(VIEW_MODES.TABLE);
+      setTableTab(meta?.tableTab || readInitialTableTab());
+    }
+    setStudioMode('explore');
+    setLoading(true);
+  }, [embedOptions]);
+
+  useEffect(() => {
+    if (embedOptions?.embed) {
+      if (embedBootstrapped.current) return;
+      embedBootstrapped.current = true;
+      if (embedOptions.dialect) {
+        setDialect(embedOptions.dialect);
+      }
+      if (embedOptions.sql) {
+        sqlRef.current = embedOptions.sql;
+        setSql(embedOptions.sql);
+        setLoading(true);
+        handleParseSqlRef.current?.(embedOptions.sql);
+      }
+      return;
+    }
+
+    if (restoredFromCacheRef.current) return;
+    if (!shouldAutoRestore()) return;
+
+    const meta = readLineageSessionMeta();
+    const storedSql = readStoredSql();
+    if (!storedSql?.trim()) return;
+
+    sqlRef.current = storedSql;
+    setSql(storedSql);
+    if (meta?.dialect) setDialect(meta.dialect);
+
+    let cancelled = false;
+    (async () => {
+      await handleParseSqlRef.current?.(storedSql);
+      if (cancelled) {
+        parseGenerationRef.current += 1;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [embedOptions]);
+
   return {
     nodes,
     edges,
@@ -669,6 +1223,7 @@ export function useLineageGraph(fitGraphToView) {
     onNodeClick,
     onPaneClick,
     onColumnSelect,
+    onNodeExpandedToggle,
     handleInit,
     warnings,
     layoutMode,
@@ -699,5 +1254,30 @@ export function useLineageGraph(fitGraphToView) {
     handleEnterExplore,
     handleToggleStudioMode,
     handleToggleZen,
+    handleExportPng,
+    handleExportSvg,
+    handleExportPdf,
+    handleExportJson,
+    handleExportCsv,
+    handleExportOpenLineage,
+    embedMode: Boolean(embedOptions?.embed),
+    viewMode,
+    handleViewModeChange,
+    tableTab,
+    setTableTab,
+    expandedStageId,
+    clearTableSelection,
+    handleStageExpand,
+    showAllOperations,
+    handleToggleShowAllOperations,
+    overviewToast,
+    dismissOverviewToast: () => setOverviewToast(null),
+    graphDetailMode,
+    compoundGraphEligible: isCompoundGraphEligible(baseNodes),
+    handleToggleGraphDetail,
+    handleCompoundStageToggle,
+    selectNodeById,
+    baseNodes,
+    baseEdges,
   };
 }

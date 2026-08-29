@@ -2,7 +2,7 @@ import { ParseSqlError } from './parseErrors';
 import { getApiBaseUrl } from './apiBase';
 
 export async function parseSql(sql, dialect = 'bigquery') {
-  const response = await fetch(`${getApiBaseUrl()}/api/parse-sql`, {
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/parse-sql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sql, dialect }),

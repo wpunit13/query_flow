@@ -25,7 +25,19 @@ venv/
 
 # Node
 node_modules/
+scripts/node_modules/
 .npm
+
+# Playwright browser binaries (local demo recorder only)
+scripts/.playwright-browsers/
+.playwright-browsers/
+
+# README demo recordings — commit docs/assets/*.gif; ignore generated video scratch
+docs/assets/*.webm
+docs/assets/*.mp4
+docs/assets/*.mov
+docs/assets/page@*
+
 # IDEs
 .idea/
 

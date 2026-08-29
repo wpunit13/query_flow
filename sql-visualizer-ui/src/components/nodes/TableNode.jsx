@@ -1,14 +1,22 @@
-import { useState } from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { theme, kindLabels, kindColors } from '../../theme';
 import { TableIcon, EyeIcon, EyeOffIcon } from '../../icons';
 import { toggleNodeCollapse } from '../../utils/graphVisibility';
 import { useGraphActions } from '../../context/GraphActionsContext';
+import { getNodeDimensions } from '../../utils/dagreLayout';
+import TruncatedText from '../TruncatedText';
 
-export default function TableNode({ id, data }) {
-  const [expanded, setExpanded] = useState(false);
+export default function TableNode({
+  id,
+  data,
+  type = 'tableNode',
+  sourcePosition = Position.Bottom,
+  targetPosition = Position.Top,
+}) {
   const { getNodes, getEdges, setNodes, setEdges } = useReactFlow();
   const graphActions = useGraphActions();
+
+  const expanded = Boolean(data.expanded);
 
   const hasColumns = data.columns && data.columns.length > 0;
   const isHighlighted = data.isSearchMatch;
@@ -20,14 +28,14 @@ export default function TableNode({ id, data }) {
   const kindColor = kindColors[data.kind] || theme.textMuted;
 
   const borderColor = data.diffStatus === 'added'
-    ? '#10b981'
+    ? theme.success
     : isActiveSearch
-      ? '#d97706'
+      ? theme.warning
       : isHighlighted
         ? theme.highlight
         : isColumnSource
           ? theme.joinBg
-          : theme.border;
+        : theme.nodeBorder;
 
   const lineageByColumn = {};
   if (data.column_lineage) {
@@ -36,34 +44,46 @@ export default function TableNode({ id, data }) {
     });
   }
 
+  const { width: nodeWidth } = getNodeDimensions({ id, data, type });
+  const alias = data?.alias;
+  const baseName = data?.label || id;
+  const showAliasHeader =
+    alias &&
+    alias.toLowerCase() !== String(baseName).toLowerCase() &&
+    alias.toLowerCase() !== String(id).toLowerCase();
+  const showAliasLine = Boolean(alias && (showAliasHeader || data?.kind === 'subquery'));
+
   return (
     <div
       style={{
-        background: theme.cardBg,
+        background: theme.nodeBg,
         border: `2px solid ${borderColor}`,
         borderRadius: '8px',
-        minWidth: '240px',
+        width: nodeWidth,
+        minWidth: nodeWidth,
+        boxSizing: 'border-box',
         boxShadow: data.diffStatus === 'added'
           ? '0 0 12px rgba(16, 185, 129, 0.35)'
           : isActiveSearch
             ? `0 0 20px ${theme.highlight}`
             : isHighlighted
               ? `0 0 15px ${theme.highlight}80`
-              : '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+              : theme.shadowCard,
         fontFamily: '"Inter", sans-serif',
         transition: 'all 0.3s ease',
+        zIndex: expanded ? 8 : 1,
       }}
     >
       <Handle
         type="target"
-        position={Position.Top}
-        style={{ background: theme.border, width: '8px', height: '8px' }}
+        position={targetPosition}
+        style={{ background: theme.nodeBorder, width: '8px', height: '8px' }}
       />
 
       <div
         style={{
           padding: '12px',
-          background: isHighlighted ? '#fef3c7' : theme.headerBg,
+          background: isHighlighted ? theme.highlightBg : theme.nodeHeaderBg,
           borderBottom: expanded && hasColumns ? `1px solid ${theme.border}` : 'none',
           borderTopLeftRadius: '6px',
           borderTopRightRadius: '6px',
@@ -79,10 +99,42 @@ export default function TableNode({ id, data }) {
             fontSize: '13px',
             fontWeight: '600',
             color: theme.textMain,
+            minWidth: 0,
+            flex: 1,
+            gap: '0',
           }}
         >
           <TableIcon />
-          {data.label}
+          <div style={{ flex: 1, minWidth: 0, marginLeft: '4px', lineHeight: 1.3 }}>
+            <TruncatedText
+              text={baseName}
+              style={{ display: 'block', fontWeight: 600 }}
+            />
+            {showAliasLine && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    fontFamily: '"JetBrains Mono", monospace',
+                    color: theme.joinBg,
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                  }}
+                >
+                  as {alias}
+                </span>
+              </div>
+            )}
+          </div>
           {data.kind && (
             <span
               style={{
@@ -92,14 +144,23 @@ export default function TableNode({ id, data }) {
                 marginLeft: '8px',
                 padding: '2px 6px',
                 borderRadius: '4px',
-                background: `${kindColor}18`,
+                background: `${kindColor}24`,
+                flexShrink: 0,
               }}
             >
               {kindLabel}
             </span>
           )}
           {data.diffStatus === 'added' && (
-            <span style={{ fontSize: '9px', color: '#10b981', marginLeft: '6px', fontWeight: '700' }}>
+            <span
+              style={{
+                fontSize: '9px',
+                color: theme.success,
+                marginLeft: '6px',
+                fontWeight: '700',
+                flexShrink: 0,
+              }}
+            >
               NEW
             </span>
           )}
@@ -110,6 +171,7 @@ export default function TableNode({ id, data }) {
                 color: theme.textMuted,
                 marginLeft: '6px',
                 fontWeight: '500',
+                flexShrink: 0,
               }}
             >
               ({data.columns.length} cols)
@@ -132,7 +194,7 @@ export default function TableNode({ id, data }) {
               }}
               style={{
                 cursor: 'pointer',
-                backgroundColor: data.collapsed ? theme.primary : '#e2e8f0',
+                backgroundColor: data.collapsed ? theme.primary : theme.mutedSurface,
                 color: data.collapsed ? 'white' : theme.textMuted,
                 border: 'none',
                 borderRadius: '4px',
@@ -153,7 +215,7 @@ export default function TableNode({ id, data }) {
             <div
               onClick={(e) => {
                 e.stopPropagation();
-                setExpanded(!expanded);
+                graphActions?.onNodeExpandedToggle?.(id);
               }}
               style={{
                 cursor: 'pointer',
@@ -188,19 +250,19 @@ export default function TableNode({ id, data }) {
                   padding: '6px 12px',
                   color: theme.textMuted,
                   borderBottom:
-                    idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.bg}`,
+                    idx === data.columns.length - 1 ? 'none' : `1px solid ${theme.nodeHeaderBg}`,
                   cursor: 'pointer',
-                  background: isSelectedCol || isSearchCol ? '#fef3c7' : 'transparent',
+                  background: isSelectedCol || isSearchCol ? theme.highlightBg : 'transparent',
                 }}
               >
-                <span
+                <TruncatedText
+                  text={col}
                   style={{
                     fontWeight: '600',
-                    color: isSearchCol ? '#d97706' : theme.textMain,
+                    color: isSearchCol ? theme.warning : theme.textMain,
+                    display: 'block',
                   }}
-                >
-                  {col}
-                </span>
+                />
                 <span style={{ fontSize: '9px', color: theme.primary, marginLeft: '6px' }}>
                   trace
                 </span>
@@ -224,8 +286,8 @@ export default function TableNode({ id, data }) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
-        style={{ background: theme.border, width: '8px', height: '8px' }}
+        position={sourcePosition}
+        style={{ background: theme.nodeBorder, width: '8px', height: '8px' }}
       />
     </div>
   );

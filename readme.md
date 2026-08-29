@@ -6,6 +6,39 @@ Built for data engineers and analysts who need to debug long, production-grade q
 
 ![Tech stack: React Flow + FastAPI + SQLGlot](https://img.shields.io/badge/React-18-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-API-green) ![SQLGlot](https://img.shields.io/badge/SQLGlot-parser-orange)
 
+## Demo
+
+Short screen captures of the current UI. Re-record with `cd scripts && npm run record` (backend + UI must be running). Details and per-GIF fixtures: [docs/assets/README.md](docs/assets/README.md).
+
+| GIF | Recorded with fixture |
+|-----|------------------------|
+| `demo-overview.gif`, `demo-column-trace.gif`, `demo-table-view.gif` | `backend/tests/fixtures/notworking.sql` |
+| `demo-pipeline-stages.gif` | `backend/tests/fixtures/large_multifeature.sql` |
+
+### Graph overview — parse, layout, and selection
+
+Render a multi-CTE query, switch to **LR** layout, briefly open **Table → Pipeline**, return to the graph, and click a node to highlight its path.
+
+![Graph overview — Render, LR layout, table peek, node selection](docs/assets/demo-overview.gif)
+
+### Column lineage trace
+
+Expand a table or output node and click **trace** on a column to highlight upstream sources on the graph.
+
+![Column trace — expand node and highlight upstream column lineage](docs/assets/demo-column-trace.gif)
+
+### Table view — pipeline stages
+
+Open **Table** view, use the **Pipeline** tab, select a stage row, and inspect stage detail (sources, joins, columns).
+
+![Table view — Pipeline tab and stage detail panel](docs/assets/demo-table-view.gif)
+
+### Graph — pipeline stages and full graph
+
+Macro **Pipeline stages** view (stage boxes, expand internals, path highlight), then toggle **Full graph** for the flat DAG, and switch back to pipeline stages. Recorded with `large_multifeature.sql` (65-node pipeline).
+
+![Pipeline stage graph — stages view, full graph toggle, path highlight](docs/assets/demo-pipeline-stages.gif)
+
 ---
 
 ## Features
@@ -44,7 +77,8 @@ Built for data engineers and analysts who need to debug long, production-grade q
 - **Layout modes**
   - **TB** — Top-to-bottom (default)
   - **LR** — Left-to-right
-  - **Radial** — Concentric layout for overview-style reading
+- **Graph / Table view** — Toggle in the graph toolbar (`G` / `T`); table has Sources, Pipeline, Operations, and Output tabs
+- **Pipeline stage graph** — For CTE/subquery pipelines (≥ 8 nodes), default macro view shows one box per stage; **Expand** opens joins/tables inside; toggle **Full graph** for the flat DAG
 - **Diff mode** — Compare two renders of the same query; new nodes and edges highlighted in green.
 - **Reset canvas** — Restore full visibility, collapse state, and layout in one click.
 
@@ -133,11 +167,24 @@ This section explains how the UI behaves in practice — especially features tha
 | Area | What it controls |
 |------|------------------|
 | **Header** (top) | SQL editor, **Render DAG**, **Reset**, and **search** |
-| **Graph toolbar** (above canvas) | Layout, **Filter branch**, focus, diff mode |
+| **Graph toolbar** (above canvas) | Layout, **Filter branch**, focus, diff mode, **Export** |
 | **Canvas** | Interactive graph — pan, zoom, click nodes |
 | **Breadcrumb** (below toolbar) | Path to the selected node; shows `column: …` when tracing a column |
 
 After **Render DAG**, the graph is laid out automatically. Node positions stay stable when you hide branches or filter — the graph does not jump unless you change layout mode or render again.
+
+### Export
+
+After rendering, use **Export ▾** in the graph toolbar:
+
+| Format | Use case |
+|--------|----------|
+| PNG / SVG / PDF | Share or print the current graph view |
+| JSON | Full versioned lineage contract + SQL metadata |
+| CSV | Flattened nodes and edges for spreadsheets |
+| OpenLineage | Marquez-compatible lineage event JSON |
+
+API equivalents for CI/CD: `POST /api/v1/lineage`, `/api/v1/export/json`, `/api/v1/export/csv`, `/api/v1/export/openlineage`. Embed docs: [docs/EMBED.md](docs/EMBED.md).
 
 ### Dialect selector
 
@@ -261,7 +308,6 @@ Use this when a large source table clutters the view but you still want to see h
 |------|-----|----------|
 | **↓ TB** | `1` | Default — vertical flow, reading top-to-bottom |
 | **→ LR** | `2` | Wide queries — horizontal flow |
-| **◎ Radial** | `3` | Overview — concentric rings |
 
 Changing layout **re-runs dagre** and may move nodes. Use **F** or **Reset** if the canvas feels off after a layout change.
 
@@ -321,7 +367,6 @@ Search query is cleared on **Render DAG**, not on **Reset** alone — use **R** 
 | `D` | Focus downstream of selected node |
 | `1` | Layout: top-to-bottom |
 | `2` | Layout: left-to-right |
-| `3` | Layout: radial |
 | `?` | Show shortcuts help |
 | `Enter` | Cycle search matches (while search box is focused) |
 
@@ -365,7 +410,7 @@ Try `backend/tests/fixtures/notworking.sql` for a stress test (recursive CTEs, l
 |-------|----------------|
 | **Frontend** | React 18, Vite, [@xyflow/react](https://reactflow.dev/), [dagre](https://github.com/dagrejs/dagre) |
 | **Backend** | Python 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [SQLGlot](https://github.com/tobymao/sqlglot), Pydantic |
-| **API** | REST `POST /api/parse-sql` — versioned JSON with nodes, edges, warnings, and column lineage |
+| **API** | REST v1 under `/api/v1/*` — versioned JSON with nodes, edges, warnings, stats, and column lineage (`GET /api/v1/version` for contract metadata) |
 
 ### Project structure
 
@@ -389,6 +434,8 @@ deploy/
   docker-compose.yml          # Local single-container run
 
 docs/
+  CATALOG.md                  # Metadata catalog integration (phased design)
+  EMBED.md                    # iframe / API embed
   ENTERPRISE_ROADMAP.md       # Enterprise / production backlog
 
 main.py                       # FastAPI entrypoint (uvicorn main:app)
@@ -405,7 +452,7 @@ Enterprise and production hardening items are tracked in [ENTERPRISE_ROADMAP.md]
 
 **Completed:** architecture refactor, lineage accuracy (section 4), advanced graph UX (section 9).
 
-**Planned:** catalog integration, export (PNG/OpenLineage), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `docs/ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose -f deploy/docker-compose.yml up --build`.
+**Planned:** catalog integration (phased design in [docs/CATALOG.md](docs/CATALOG.md)), workspace save/share, auth, observability, and production deployment (K8s/Helm — see `docs/ENTERPRISE_ROADMAP.md`). Local Docker: `docker compose -f deploy/docker-compose.yml up --build`.
 
 ---
 

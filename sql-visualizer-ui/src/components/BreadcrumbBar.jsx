@@ -1,19 +1,156 @@
-import { theme } from '../theme';
+import { useTheme } from '../context/ThemeContext';
+import { getColumnTraceSummary } from '../utils/lineagePath';
+import { chipStyle } from '../theme/uiStyles';
 
-export default function BreadcrumbBar({ breadcrumb, selectedColumn }) {
+function Chip({ children, accent }) {
+  const { theme } = useTheme();
+  return (
+    <span style={chipStyle(theme, accent)}>
+      {children}
+    </span>
+  );
+}
+
+export default function BreadcrumbBar({
+  breadcrumb,
+  selectedColumn,
+  selectedNodeId,
+  nodes,
+  edges,
+  onClear,
+}) {
+  const { theme } = useTheme();
+
+  const barStyle = {
+    padding: '8px 12px',
+    background: theme.headerBg,
+    borderBottom: `1px solid ${theme.border}`,
+    fontSize: '12px',
+    color: theme.textMuted,
+  };
+
+  const clearButton = onClear ? (
+    <button
+      type="button"
+      onClick={onClear}
+      style={{
+        marginLeft: 'auto',
+        fontSize: '11px',
+        padding: '4px 10px',
+        border: `1px solid ${theme.border}`,
+        borderRadius: '6px',
+        background: theme.buttonBg,
+        color: theme.textMuted,
+        cursor: 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      Clear
+    </button>
+  ) : null;
+
+  if (selectedColumn && selectedNodeId && nodes?.length) {
+    const trace = getColumnTraceSummary(
+      selectedNodeId,
+      selectedColumn,
+      nodes,
+      edges
+    );
+
+    return (
+      <div style={barStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: '600', color: theme.textMain }}>Column trace</span>
+          <Chip accent>{trace.columnName}</Chip>
+          <span>in</span>
+          <Chip>{trace.outputLabel}</Chip>
+          {clearButton}
+        </div>
+
+        {trace.pipelineStages.length > 0 && (
+          <div
+            style={{
+              marginTop: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontWeight: '600', color: theme.textMain }}>Via stages</span>
+            {trace.pipelineStages.map((stage, idx) => (
+              <span key={stage.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {idx > 0 && <span style={{ color: theme.border }}>→</span>}
+                <Chip>{stage.label}</Chip>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {trace.unionMerges?.length > 0 && (
+          <div style={{ marginTop: '6px' }}>
+            {trace.unionMerges.map((union) => (
+              <div
+                key={union.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
+                  marginBottom: '4px',
+                }}
+              >
+                <span style={{ fontWeight: '600', color: theme.textMain }}>Merged by</span>
+                <Chip accent>{union.unionType}</Chip>
+                <span style={{ fontSize: '11px' }}>
+                  {union.branchCount} branch{union.branchCount !== 1 ? 'es' : ''}:
+                </span>
+                {union.branches.map((branch, idx) => (
+                  <Chip key={branch.tail_id || idx}>
+                    Branch {branch.index + 1}: {branch.label}
+                  </Chip>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {trace.sourceRefs.length > 0 && (
+          <div
+            style={{
+              marginTop: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ fontWeight: '600', color: theme.textMain }}>From sources</span>
+            {trace.sourceRefs.map((src) => (
+              <Chip key={src.ref}>
+                {src.tableLabel}
+                <span style={{ color: theme.textMuted, fontWeight: '400' }}> ({src.ref})</span>
+              </Chip>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: '6px', fontSize: '11px', color: theme.textMuted }}>
+          Join nodes are omitted from this bar; UNION merges are shown when present.
+        </div>
+      </div>
+    );
+  }
+
   if (!breadcrumb?.length) return null;
 
   return (
     <div
       style={{
+        ...barStyle,
         display: 'flex',
         alignItems: 'center',
         gap: '6px',
-        padding: '8px 12px',
-        background: '#f8fafc',
-        borderBottom: `1px solid ${theme.border}`,
-        fontSize: '12px',
-        color: theme.textMuted,
         flexWrap: 'wrap',
       }}
     >
@@ -31,11 +168,7 @@ export default function BreadcrumbBar({ breadcrumb, selectedColumn }) {
           </span>
         </span>
       ))}
-      {selectedColumn && (
-        <span style={{ marginLeft: '8px', color: theme.joinBg, fontWeight: '600' }}>
-          · column: {selectedColumn}
-        </span>
-      )}
+      {clearButton}
     </div>
   );
 }

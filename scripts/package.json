@@ -1,0 +1,13 @@
+{
+  "name": "sql-lineage-studio-demo-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "record": "node record-demo.mjs"
+  },
+  "dependencies": {
+    "gifenc": "^1.0.3",
+    "pngjs": "^7.0.0",
+    "playwright": "^1.49.1"
+  }
+}
