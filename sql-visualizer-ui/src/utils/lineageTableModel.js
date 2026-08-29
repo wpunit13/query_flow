@@ -16,7 +16,7 @@ export const VIEW_MODES = {
   TABLE: 'table',
 };
 
-const STAGE_KINDS = new Set([
+export const STAGE_KINDS = new Set([
   'cte',
   'subquery',
   'final_output',
@@ -25,7 +25,7 @@ const STAGE_KINDS = new Set([
   'merge_target',
 ]);
 
-const SOURCE_KINDS = new Set(['physical_table', 'view']);
+export const SOURCE_KINDS = new Set(['physical_table', 'view']);
 
 export function formatOperandLabel(node) {
   if (!node) return '—';
@@ -196,7 +196,75 @@ export function getAllOperations(nodes, edges) {
       };
     });
 
-  return [...unionOps, ...joinOps].sort((a, b) => {
+  const clauseOps = [];
+  nodes.forEach((n) => {
+    if (n.type === 'joinNode' || n.type === 'unionNode') return;
+    const stageId = n.id;
+    const stageLabel = n.data?.label || n.id;
+    const d = n.data || {};
+
+    if (d.where_clause) {
+      clauseOps.push({
+        id: `where_${stageId}`,
+        opKind: 'where',
+        stageId,
+        stageLabel,
+        order: 100,
+        opType: 'WHERE',
+        detail: d.where_clause,
+        operands: [],
+        conditions: [d.where_clause],
+        branches: [],
+      });
+    }
+
+    if (d.group_by && d.group_by.length > 0) {
+      clauseOps.push({
+        id: `groupby_${stageId}`,
+        opKind: 'group_by',
+        stageId,
+        stageLabel,
+        order: 200,
+        opType: 'GROUP BY',
+        detail: d.group_by.join(', '),
+        operands: [],
+        conditions: [],
+        branches: [],
+      });
+    }
+
+    if (d.having_clause) {
+      clauseOps.push({
+        id: `having_${stageId}`,
+        opKind: 'having',
+        stageId,
+        stageLabel,
+        order: 300,
+        opType: 'HAVING',
+        detail: d.having_clause,
+        operands: [],
+        conditions: [d.having_clause],
+        branches: [],
+      });
+    }
+
+    if (d.qualify_clause) {
+      clauseOps.push({
+        id: `qualify_${stageId}`,
+        opKind: 'qualify',
+        stageId,
+        stageLabel,
+        order: 400,
+        opType: 'QUALIFY',
+        detail: d.qualify_clause,
+        operands: [],
+        conditions: [d.qualify_clause],
+        branches: [],
+      });
+    }
+  });
+
+  return [...unionOps, ...joinOps, ...clauseOps].sort((a, b) => {
     if (a.stageId !== b.stageId) {
       return (a.stageId || '').localeCompare(b.stageId || '');
     }
@@ -209,6 +277,10 @@ export function getStageOperationSummary(stageId, operations) {
   if (ops.length === 0) return '—';
   const unions = ops.filter((o) => o.opKind === 'union');
   const joins = ops.filter((o) => o.opKind === 'join');
+  const groupBys = ops.filter((o) => o.opKind === 'group_by');
+  const wheres = ops.filter((o) => o.opKind === 'where');
+  const havings = ops.filter((o) => o.opKind === 'having');
+  const qualifies = ops.filter((o) => o.opKind === 'qualify');
   const parts = [];
   if (unions.length > 0) {
     const types = [...new Set(unions.map((o) => o.opType))];
@@ -217,6 +289,18 @@ export function getStageOperationSummary(stageId, operations) {
   if (joins.length > 0) {
     const types = [...new Set(joins.map((o) => o.opType))];
     parts.push(`${joins.length} join(s): ${types.join(', ')}`);
+  }
+  if (wheres.length > 0) {
+    parts.push('Where filter');
+  }
+  if (groupBys.length > 0) {
+    parts.push('Group By');
+  }
+  if (havings.length > 0) {
+    parts.push('Having filter');
+  }
+  if (qualifies.length > 0) {
+    parts.push('Qualify');
   }
   return parts.join('; ');
 }

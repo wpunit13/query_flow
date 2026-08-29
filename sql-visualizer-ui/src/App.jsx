@@ -13,7 +13,8 @@ import ShortcutsModal from './components/ShortcutsModal';
 import OverviewToast from './components/OverviewToast';
 import ZenFloatingControls from './components/ZenFloatingControls';
 import { LAYOUT_MODES } from './utils/dagreLayout';
-import { VIEW_MODES } from './utils/lineageTableModel';
+import { VIEW_MODES, TABLE_TABS } from './utils/lineageTableModel';
+import { GRAPH_DETAIL_MODES } from './constants/graphDetailMode';
 
 export default function App() {
   const { theme } = useTheme();
@@ -32,6 +33,11 @@ export default function App() {
 
   const graph = useLineageGraph(fitGraphToView, embedOptions);
 
+  const isTableView =
+    graph.viewMode === VIEW_MODES.TABLE &&
+    !graph.zenMode &&
+    (graph.hasRenderedGraph || graph.loading);
+
   useKeyboardShortcuts({
     onFocusSearch: () => graph.searchInputRef.current?.focus(),
     onFitView: () => graph.fitGraphToView(),
@@ -46,6 +52,25 @@ export default function App() {
     onToggleZen: graph.handleToggleZen,
     onViewGraph: () => graph.handleViewModeChange(VIEW_MODES.GRAPH),
     onViewTable: () => graph.handleViewModeChange(VIEW_MODES.TABLE),
+    onViewSource: () => {
+      if (!isTableView) graph.handleViewModeChange(VIEW_MODES.TABLE);
+      graph.setTableTab(TABLE_TABS.SOURCES);
+    },
+    onViewPipelineTab: () => {
+      if (!isTableView) graph.handleViewModeChange(VIEW_MODES.TABLE);
+      graph.setTableTab(TABLE_TABS.PIPELINE);
+    },
+    onViewOperations: () => {
+      if (!isTableView) graph.handleViewModeChange(VIEW_MODES.TABLE);
+      graph.setTableTab(TABLE_TABS.OPERATIONS);
+    },
+    onViewTarget: () => {
+      if (!isTableView) graph.handleViewModeChange(VIEW_MODES.TABLE);
+      graph.setTableTab(TABLE_TABS.OUTPUT);
+    },
+    onSetPipelineGraph: () => graph.handleSetGraphDetailMode(GRAPH_DETAIL_MODES.COMPOUND),
+    onSetWholeGraph: () => graph.handleSetGraphDetailMode(GRAPH_DETAIL_MODES.FLAT),
+    isTableView,
     canSwitchView: graph.hasRenderedGraph && graph.studioMode === 'explore',
     canFocusSearch: graph.hasRenderedGraph && graph.studioMode === 'explore',
     enabled: !graph.showShortcuts,
@@ -68,11 +93,6 @@ export default function App() {
   );
 
   const shellPadding = graph.embedMode ? '0' : '20px';
-
-  const isTableView =
-    graph.viewMode === VIEW_MODES.TABLE &&
-    !graph.zenMode &&
-    (graph.hasRenderedGraph || graph.loading);
 
   return (
     <GraphActionsContext.Provider value={graphActions}>
@@ -167,15 +187,22 @@ export default function App() {
                 compoundGraphEligible={graph.compoundGraphEligible}
                 graphDetailMode={graph.graphDetailMode}
                 onToggleGraphDetail={graph.handleToggleGraphDetail}
-              />
-              <BreadcrumbBar
-                breadcrumb={graph.breadcrumb}
-                selectedColumn={graph.selectedColumn}
-                selectedNodeId={graph.selectedNodeId}
+                tableTab={graph.tableTab}
+                onTableTabChange={graph.setTableTab}
+                expandedStageId={graph.expandedStageId}
                 nodes={graph.baseNodes}
                 edges={graph.baseEdges}
-                onClear={graph.clearTableSelection}
               />
+              {!isTableView && (
+                <BreadcrumbBar
+                  breadcrumb={graph.breadcrumb}
+                  selectedColumn={graph.selectedColumn}
+                  selectedNodeId={graph.selectedNodeId}
+                  nodes={graph.baseNodes}
+                  edges={graph.baseEdges}
+                  onClear={graph.clearTableSelection}
+                />
+              )}
             </>
           )}
           {graph.loading && !graph.hasRenderedGraph ? (
@@ -200,8 +227,6 @@ export default function App() {
               expandedStageId={graph.expandedStageId}
               tableTab={graph.tableTab}
               onTableTabChange={graph.setTableTab}
-              showAllOperations={graph.showAllOperations}
-              onToggleShowAllOperations={graph.handleToggleShowAllOperations}
               onNodeSelect={graph.selectNodeById}
               onColumnSelect={graph.onColumnSelect}
               onClearSelection={graph.clearTableSelection}

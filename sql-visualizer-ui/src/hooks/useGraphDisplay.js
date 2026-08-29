@@ -406,6 +406,13 @@ export function useGraphDisplay({ selectedNodeId }) {
     return next;
   }, [graphDetailMode]);
 
+  const setSpecificGraphDetailMode = useCallback((mode) => {
+    setGraphDetailMode(mode);
+    graphDetailModeRef.current = mode;
+    persistGraphUiState({ userChoseFlat: mode === GRAPH_DETAIL_MODES.FLAT });
+    return mode;
+  }, []);
+
   const resetViewFilters = useCallback(() => {
     setBranchFilter('');
     setFilterNoMatches(false);
@@ -597,6 +604,7 @@ export function useGraphDisplay({ selectedNodeId }) {
     handleClearFocus,
     setGraphDetailModeFromNodes,
     toggleGraphDetailMode,
+    setSpecificGraphDetailMode,
     resetViewFilters,
     resetBaseGraphPresentation,
     toggleCompoundStage,

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { parseSql } from '../api/lineageClient';
 import { DEFAULT_DIALECT, detectDialect, fetchDialects } from '../api/dialectClient';
+import { FALLBACK_DIALECTS } from '../constants/dialects';
 import {
   persistLineageSession,
   readLineageParseResult,
@@ -11,15 +12,6 @@ import {
   readStoredSql,
   shouldPreferTableOverview,
 } from '../utils/lineageSession';
-
-const FALLBACK_DIALECTS = [
-  { id: 'bigquery', label: 'BigQuery', limitations: '' },
-  { id: 'snowflake', label: 'Snowflake', limitations: '' },
-  { id: 'postgres', label: 'PostgreSQL', limitations: '' },
-  { id: 'spark', label: 'Spark', limitations: '' },
-  { id: 'redshift', label: 'Redshift', limitations: '' },
-  { id: 'duckdb', label: 'DuckDB', limitations: '' },
-];
 
 function readInitialDialect() {
   const meta = readLineageSessionMeta();

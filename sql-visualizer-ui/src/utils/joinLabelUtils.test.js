@@ -5,7 +5,10 @@ import {
   buildAliasLegend,
   buildAliasMap,
   collectAliasEntriesFromOperands,
+  formatJoinStepDetail,
+  formatJoinStepLine,
   formatOperandDisplay,
+  formatTableAliasPhrase,
   parseAliasFromOperandLabel,
 } from './joinLabelUtils';
 
@@ -46,6 +49,47 @@ describe('formatOperandDisplay', () => {
     const display = formatOperandDisplay('users');
     expect(display.alias).toBeNull();
     expect(display.table).toBe('users');
+  });
+});
+
+describe('formatJoinStepLine', () => {
+  it('describes the table being joined in, not a × formula', () => {
+    expect(
+      formatJoinStepLine({
+        opType: 'INNER JOIN',
+        right: { label: 's (stores)' },
+        conditions: ['s.region_code = r.region_code'],
+      })
+    ).toBe('INNER JOIN stores (s) ON s.region_code = r.region_code');
+  });
+
+  it('ignores nested left-join labels from chained joins', () => {
+    expect(
+      formatJoinStepLine({
+        opType: 'INNER JOIN',
+        left: { label: 'INNER JOIN: r (regions) + s (stores)' },
+        right: { label: 'sa (store_sales)' },
+        conditions: ['sa.store_id = s.store_id'],
+      })
+    ).toBe('INNER JOIN store_sales (sa) ON sa.store_id = s.store_id');
+  });
+});
+
+describe('formatJoinStepDetail', () => {
+  it('omits join type already shown in the Operation column', () => {
+    expect(
+      formatJoinStepDetail({
+        opType: 'INNER JOIN',
+        right: { label: 'sa (store_sales)' },
+        conditions: ['sa.store_id = s.store_id'],
+      })
+    ).toBe('store_sales (sa) ON sa.store_id = s.store_id');
+  });
+});
+
+describe('formatTableAliasPhrase', () => {
+  it('puts table first', () => {
+    expect(formatTableAliasPhrase('s (stores)')).toBe('stores (s)');
   });
 });
 

@@ -15,29 +15,29 @@ Short screen captures of the current UI. Re-record with `cd scripts && npm run r
 | `demo-overview.gif`, `demo-column-trace.gif`, `demo-table-view.gif` | `backend/tests/fixtures/notworking.sql` |
 | `demo-pipeline-stages.gif` | `backend/tests/fixtures/large_multifeature.sql` |
 
-### Graph overview — parse, layout, and selection
+### Graph overview — parse, layout, zen mode, and search
 
-Render a multi-CTE query, switch to **LR** layout, briefly open **Table → Pipeline**, return to the graph, and click a node to highlight its path.
+Author SQL in the editor, parse into an interactive DAG, switch to **LR** layout (`2`), immerse in **Zen mode** (`Z`), search tables/columns (`/`), and click nodes for upstream/downstream lineage highlighting with breadcrumbs.
 
-![Graph overview — Render, LR layout, table peek, node selection](docs/assets/demo-overview.gif)
+![Graph overview — Render, LR layout, Zen mode, search, node selection](docs/assets/demo-overview.gif)
 
 ### Column lineage trace
 
-Expand a table or output node and click **trace** on a column to highlight upstream sources on the graph.
+Expand a table or output node and click on a column to highlight its upstream lineage path and source tables across all CTEs and subqueries.
 
 ![Column trace — expand node and highlight upstream column lineage](docs/assets/demo-column-trace.gif)
 
-### Table view — pipeline stages
+### Table view — sources, pipeline, operations, and target
 
-Open **Table** view, use the **Pipeline** tab, select a stage row, and inspect stage detail (sources, joins, columns).
+Open **Table** view (`T`), navigate across **Sources** (`S`), **Pipeline** (`P`), **Operations** (`O`) with grouped collapsible stages, and **Target** (`T`) tabs with side-by-side selection inspector.
 
-![Table view — Pipeline tab and stage detail panel](docs/assets/demo-table-view.gif)
+![Table view — Sources, Pipeline, Operations, Target tabs and inspector](docs/assets/demo-table-view.gif)
 
-### Graph — pipeline stages and full graph
+### Graph — pipeline stages, whole graph, and multi-format exports
 
-Macro **Pipeline stages** view (stage boxes, expand internals, path highlight), then toggle **Full graph** for the flat DAG, and switch back to pipeline stages. Recorded with `large_multifeature.sql` (65-node pipeline).
+Macro **Pipeline stages** view (`P`) with expandable stage boxes, toggle **Whole graph** (`W`) for the flat DAG, and export to PNG, SVG, PDF, JSON, CSV, or OpenLineage. Recorded with `large_multifeature.sql` (65-node pipeline).
 
-![Pipeline stage graph — stages view, full graph toggle, path highlight](docs/assets/demo-pipeline-stages.gif)
+![Pipeline stage graph — stages view, whole graph toggle, export menu](docs/assets/demo-pipeline-stages.gif)
 
 ---
 
@@ -49,7 +49,7 @@ Macro **Pipeline stages** view (stage boxes, expand internals, path highlight), 
 - **CTE & subquery support** — Each CTE, subquery, and final output is a distinct node with correct upstream wiring.
 - **Join condition extraction** — Join nodes show `ON` / `USING` conditions; expand to read full join logic.
 - **Per-join nodes** — Separate join steps with type preserved (`LEFT JOIN`, `INNER JOIN`, etc.) and order in the chain.
-- **Multi-dialect parsing** — Powered by SQLGlot (BigQuery default; Postgres, Snowflake, Spark, and others supported server-side).
+- **Multi-dialect parsing & auto-detection** — Powered by SQLGlot with automatic dialect detection (BigQuery, PostgreSQL, Snowflake, DuckDB, MySQL, SQLite, Spark, Databricks, ClickHouse, and more).
 - **Complex SQL preprocessing** — Handles patterns like `LATERAL` joins with parse warnings surfaced in the UI.
 
 ### Lineage accuracy
@@ -57,30 +57,36 @@ Macro **Pipeline stages** view (stage boxes, expand internals, path highlight), 
 - **Node kinds** — Visual badges for `TABLE`, `CTE`, `SUBQUERY`, `VIEW`, `OUTPUT`, `INSERT`, `MERGE`, and more.
 - **Qualified names** — Supports `schema.table` and `database.schema.table` where present in SQL.
 - **Column-level lineage** — Output columns include upstream source references via SQLGlot’s lineage API.
-- **Column trace mode** — Expand a node and click **trace** on any column to highlight its upstream path and source tables.
+- **Column trace mode** — Expand a node and click any column to highlight its upstream path and source tables across the graph.
 - **DML / DDL statements** — Lineage for `SELECT`, `INSERT`, `CREATE VIEW`, and `MERGE`.
 
-### Graph interaction
+### Graph interaction & exploration
 
 - **Lineage highlighting** — Click a node to highlight upstream and downstream paths; unrelated nodes dim.
+- **Zen mode** — One-key full-screen distraction-free graph exploration (`Z` / `Esc`).
 - **Upstream hide/show** — Hide upstream dependencies per node without re-layout (positions stay stable).
-- **Smart search** — Find tables, columns, or lineage source names; press `Enter` to cycle through matches.
+- **Smart search** — Find tables, columns, or lineage source names (`/`); press `Enter` to cycle through matches.
 - **Branch filter** — Filter the graph to paths involving a specific table or CTE name.
-- **Focus branch** — Show only upstream or only downstream of the selected node.
+- **Focus branch** — Show only upstream (`U`) or only downstream (`D`) of the selected node.
 - **Breadcrumb path** — See the lineage path to the selected node (e.g. `users → join → cte1 → Final_Output`).
 - **Collapsed columns by default** — Nodes show a column count; expand to inspect schema and lineage.
 - **Interactive minimap** — Draggable, zoomable minimap with color coding matching node types.
-- **Fit view for large graphs** — Auto-fit on render with deep zoom-out for complex queries.
+- **Fit view for large graphs** — Auto-fit on render (`F`) with deep zoom-out for complex queries.
 
-### Layout & comparison
+### Layout, tables & exports
 
 - **Layout modes**
-  - **TB** — Top-to-bottom (default)
-  - **LR** — Left-to-right
-- **Graph / Table view** — Toggle in the graph toolbar (`G` / `T`); table has Sources, Pipeline, Operations, and Output tabs
-- **Pipeline stage graph** — For CTE/subquery pipelines (≥ 8 nodes), default macro view shows one box per stage; **Expand** opens joins/tables inside; toggle **Full graph** for the flat DAG
+  - **TB** (`1`) — Top-to-bottom (default)
+  - **LR** (`2`) — Left-to-right
+- **Table view** (`T`) — Structured tabbed lineage:
+  - **Sources** (`S`) — Upstream physical/external tables and columns.
+  - **Pipeline** (`P`) — Sequential stage list with dependency ordering.
+  - **Operations** (`O`) — Complete join and transformation operations grouped by stage with collapse/expand.
+  - **Target** (`T`) — Output columns with source column references.
+- **Pipeline stage graph** — For CTE pipelines, macro compound view shows one box per stage (`P`); **Expand** opens joins/tables inside; toggle **Whole graph** (`W`) for the flat DAG.
+- **Multi-format exports** — Export as **PNG**, **SVG**, **PDF**, **JSON** (full contract), **CSV** (nodes/edges), or **OpenLineage** standard JSON.
 - **Diff mode** — Compare two renders of the same query; new nodes and edges highlighted in green.
-- **Reset canvas** — Restore full visibility, collapse state, and layout in one click.
+- **Context-aware shortcuts** — Fast keyboard navigation across Graph and Table views (`?` for shortcut modal).
 
 ---
 

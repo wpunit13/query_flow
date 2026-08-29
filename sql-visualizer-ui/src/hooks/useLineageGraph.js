@@ -17,17 +17,8 @@ import {
   applyDiffToNodes,
   applyDiffToEdges,
 } from '../utils/graphDiff';
-import { computeSearchMatches, getSearchVisibilityIds } from '../utils/searchGraph';
-import { getNodeDimensions } from '../utils/dagreLayout';
-import {
-  buildClientExportPayload,
-  downloadCsvFromLineage,
-  downloadGraphPdf,
-  downloadGraphPng,
-  downloadGraphSvg,
-  downloadJsonExport,
-  downloadOpenLineageExport,
-} from '../utils/exportGraph';
+import { useGraphSearch } from './useGraphSearch';
+import { useGraphExport } from './useGraphExport';
 
 import {
   getDefaultExpandedStageId,
@@ -63,9 +54,6 @@ const STAGE_KINDS = new Set([
 ]);
 
 export function useLineageGraph(fitGraphToView, embedOptions = null) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchIndex, setSearchIndex] = useState(0);
   const [rfInstance, setRfInstance] = useState(null);
   const [studioMode, setStudioMode] = useState(readInitialStudioMode);
   const [zenMode, setZenMode] = useState(false);
@@ -84,8 +72,6 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const [expandedStageId, setExpandedStageId] = useState(null);
   const [showAllOperations, setShowAllOperations] = useState(false);
   const [overviewToast, setOverviewToast] = useState(null);
-
-  const searchInputRef = useRef(null);
   const onParseSuccessRef = useRef(null);
   const onBeforeParseRef = useRef(null);
   const onParseFailedRef = useRef(null);
@@ -117,6 +103,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     resetViewFilters,
     resetBaseGraphPresentation,
     toggleGraphDetailMode,
+    setSpecificGraphDetailMode,
     resolveGraphDetailModeForNodes,
     panToNode,
   } = graph;
@@ -127,6 +114,39 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     onParseSuccess: (data, sql, opts) => onParseSuccessRef.current?.(data, sql, opts),
     onParseFailed: () => onParseFailedRef.current?.(),
     onPrepareSessionRestore: (payload) => onPrepareSessionRestoreRef.current?.(payload),
+  });
+
+  const {
+    searchQuery,
+    searchResults,
+    searchIndex,
+    searchInputRef,
+    handleSearchChange,
+    handleSearchKeyDown,
+    resetSearch,
+  } = useGraphSearch({
+    baseNodes,
+    baseEdges,
+    nodes,
+    setNodes,
+    setEdges: graph.setEdges,
+    rfInstance,
+    layoutMode,
+    focusMode,
+    applyDisplayFromBase,
+    panToNode,
+  });
+
+  const {
+    handleExportPng,
+    handleExportSvg,
+    handleExportPdf,
+    handleExportJson,
+    handleExportCsv,
+    handleExportOpenLineage,
+  } = useGraphExport({
+    rfInstance,
+    parse,
   });
 
   /** Always read live editor text — React state can lag behind paste/typing. */
@@ -222,8 +242,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
 
   onParseSuccessRef.current = applyParsedLineage;
   onBeforeParseRef.current = () => {
-    setSearchQuery('');
-    setSearchResults([]);
+    resetSearch();
     setSelectedNodeId(null);
     setSelectedColumn(null);
     setBreadcrumb([]);
@@ -296,98 +315,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     setDiffSummary(null);
   };
 
-  const handleSearchChange = (e) => {
-    const query = e.target.value;
-    setSearchQuery(query);
 
-    if (!query.trim()) {
-      setSearchResults([]);
-      setSearchIndex(0);
-      applyDisplayFromBase(layoutMode, focusMode);
-      return;
-    }
-
-    if (!baseNodes.length) {
-      setSearchResults([]);
-      return;
-    }
-
-    const matches = computeSearchMatches(baseNodes, query);
-    setSearchResults(matches);
-    setSearchIndex(0);
-
-    if (matches.length === 0) {
-      applyDisplayFromBase(layoutMode, focusMode);
-      return;
-    }
-
-    const visibleIds = getSearchVisibilityIds(matches, baseEdges);
-    const { nodes: filteredNodes, edges: filteredEdges } = applyVisibilityFilter(
-      baseNodes,
-      baseEdges,
-      visibleIds
-    );
-    const displayNodes = ensureNodePositions(filteredNodes);
-
-    setNodes(
-      displayNodes.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          isSearchMatch: matches.includes(n.id),
-          isActiveSearchMatch: n.id === matches[0],
-          searchQuery: query,
-        },
-      }))
-    );
-    graph.setEdges(filteredEdges);
-
-    if (rfInstance) {
-      const targetNode = displayNodes.find((n) => n.id === matches[0]);
-      if (targetNode?.position) {
-        setTimeout(() => {
-          const { width, height } = getNodeDimensions(targetNode);
-          rfInstance.setCenter(
-            targetNode.position.x + width / 2,
-            targetNode.position.y + height / 2,
-            { zoom: 1.2, duration: 600 }
-          );
-        }, 50);
-      }
-    }
-  };
-
-  const panToSearchResult = (index) => {
-    if (!rfInstance || !searchResults.length) return;
-    panToNode(rfInstance, searchResults[index], nodes);
-  };
-
-  const handleSearchKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      setSearchQuery('');
-      setSearchResults([]);
-      setSearchIndex(0);
-      applyDisplayFromBase(layoutMode, focusMode);
-      searchInputRef.current?.blur();
-      return;
-    }
-    if (e.key === 'Enter' && searchResults.length > 0) {
-      e.preventDefault();
-      const targetId = searchResults[searchIndex];
-      panToSearchResult(searchIndex);
-      setNodes((nds) =>
-        nds.map((n) => ({
-          ...n,
-          data: {
-            ...n.data,
-            isActiveSearchMatch: n.id === targetId,
-          },
-        }))
-      );
-      setSearchIndex((searchIndex + 1) % searchResults.length);
-    }
-  };
 
   const selectNodeById = useCallback(
     (nodeId) => {
@@ -498,6 +426,36 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     parse,
   ]);
 
+  const handleSetGraphDetailMode = useCallback(
+    (mode) => {
+      if (!isCompoundGraphEligible(baseNodes) && mode === GRAPH_DETAIL_MODES.COMPOUND) return;
+      if (graphDetailMode === mode) return;
+      const next = setSpecificGraphDetailMode(mode);
+      const meta = readLineageSessionMeta();
+      parse.persistSession({
+        sql: readStoredSql() || parse.sqlRef.current,
+        dialect: parse.dialect,
+        preferTableOverview:
+          meta?.preferTableOverview ??
+          shouldPreferTableOverview(meta, readStoredSql() || parse.sqlRef.current),
+        tableTab: meta?.tableTab ?? readInitialTableTab(),
+        userChoseFlat: next === GRAPH_DETAIL_MODES.FLAT,
+      });
+      applyDisplayFromBase(layoutMode, focusMode, { graphDetailMode: next });
+      setTimeout(() => fitGraphToView(), 80);
+    },
+    [
+      baseNodes,
+      graphDetailMode,
+      setSpecificGraphDetailMode,
+      layoutMode,
+      focusMode,
+      applyDisplayFromBase,
+      fitGraphToView,
+      parse,
+    ]
+  );
+
   const handleViewModeChange = useCallback(
     (mode) => {
       if (mode === VIEW_MODES.TABLE) {
@@ -572,11 +530,9 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
   const handleEnterAuthor = useCallback(() => {
     setStudioMode('author');
     setZenMode(false);
-    setSearchQuery('');
-    setSearchResults([]);
-    setSearchIndex(0);
+    resetSearch();
     applyDisplayFromBase(layoutMode, focusMode);
-  }, [layoutMode, focusMode, applyDisplayFromBase]);
+  }, [layoutMode, focusMode, applyDisplayFromBase, resetSearch]);
 
   const handleEnterExplore = () => {
     if (!baseNodes.length) return;
@@ -609,41 +565,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     handleBranchFilterChange(branchFilter);
   };
 
-  const handleExportPng = useCallback(async () => {
-    if (!rfInstance) throw new Error('Graph not ready — render a query first');
-    await downloadGraphPng(rfInstance);
-  }, [rfInstance]);
 
-  const handleExportSvg = useCallback(async () => {
-    if (!rfInstance) throw new Error('Graph not ready — render a query first');
-    await downloadGraphSvg(rfInstance);
-  }, [rfInstance]);
-
-  const handleExportPdf = useCallback(async () => {
-    if (!rfInstance) throw new Error('Graph not ready — render a query first');
-    await downloadGraphPdf(rfInstance);
-  }, [rfInstance]);
-
-  const handleExportJson = useCallback(() => {
-    if (!parse.lastParseResult) throw new Error('No lineage data — render a query first');
-    const payload = buildClientExportPayload(
-      parse.lastParseResult,
-      getSqlForAction(),
-      parse.dialect
-    );
-    downloadJsonExport(payload);
-  }, [parse.lastParseResult, parse.dialect, getSqlForAction]);
-
-  const handleExportCsv = useCallback(() => {
-    if (!parse.lastParseResult) throw new Error('No lineage data — render a query first');
-    downloadCsvFromLineage(parse.lastParseResult);
-  }, [parse.lastParseResult]);
-
-  const handleExportOpenLineage = useCallback(async () => {
-    const sqlToExport = getSqlForAction();
-    if (!sqlToExport?.trim()) throw new Error('No SQL to export');
-    await downloadOpenLineageExport(sqlToExport, parse.dialect);
-  }, [parse.dialect, getSqlForAction]);
 
   return {
     nodes,
@@ -727,6 +649,7 @@ export function useLineageGraph(fitGraphToView, embedOptions = null) {
     graphDetailMode,
     compoundGraphEligible: isCompoundGraphEligible(baseNodes),
     handleToggleGraphDetail,
+    handleSetGraphDetailMode,
     handleCompoundStageToggle,
     selectNodeById,
     baseNodes,

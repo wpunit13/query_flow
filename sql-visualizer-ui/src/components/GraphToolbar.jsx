@@ -1,5 +1,13 @@
 import { LAYOUT_MODES } from '../utils/dagreLayout';
-import { VIEW_MODES } from '../utils/lineageTableModel';
+import {
+  VIEW_MODES,
+  TABLE_TABS,
+  isPipelineQuery,
+  getSourceNodes,
+  topologicalSortStages,
+  getJoinOperations,
+  getOutputNode,
+} from '../utils/lineageTableModel';
 import { GRAPH_DETAIL_MODES } from '../constants/graphDetailMode';
 import { useTheme } from '../context/ThemeContext';
 import { inputFieldStyle } from '../theme/uiStyles';
@@ -37,9 +45,31 @@ export default function GraphToolbar({
   compoundGraphEligible,
   graphDetailMode,
   onToggleGraphDetail,
+  tableTab,
+  onTableTabChange,
+  showAllOperations,
+  onToggleShowAllOperations,
+  expandedStageId,
+  nodes = [],
+  edges = [],
 }) {
   const { theme: t } = useTheme();
   const isGraph = viewMode === VIEW_MODES.GRAPH;
+  const isTable = viewMode === VIEW_MODES.TABLE;
+  const pipelineQuery = isPipelineQuery(nodes);
+  const sourceCount = getSourceNodes(nodes).length;
+  const stageCount = topologicalSortStages(nodes, edges).length;
+  const operationCount = getJoinOperations(nodes, edges).length;
+  const outputCount = getOutputNode(nodes)?.data?.column_lineage?.length || 0;
+
+  const tableTabOptions = [
+    { value: TABLE_TABS.SOURCES, label: `Sources ${sourceCount}` },
+    ...(pipelineQuery
+      ? [{ value: TABLE_TABS.PIPELINE, label: `Pipeline ${stageCount}` }]
+      : []),
+    { value: TABLE_TABS.OPERATIONS, label: `Operations ${operationCount}` },
+    { value: TABLE_TABS.OUTPUT, label: `Target ${outputCount}` },
+  ];
 
   const actionBtn = (active, disabled = false) => ({
     padding: '6px 10px',
@@ -77,6 +107,20 @@ export default function GraphToolbar({
 
       <span style={{ color: t.border, margin: '0 4px', flexShrink: 0 }}>|</span>
 
+      {isTable && (
+        <SegmentedToggle
+          value={
+            !pipelineQuery && tableTab === TABLE_TABS.PIPELINE
+              ? TABLE_TABS.OUTPUT
+              : tableTab
+          }
+          onChange={onTableTabChange}
+          minWidth={pipelineQuery ? '420px' : '340px'}
+          title="Table inspect tabs"
+          options={tableTabOptions}
+        />
+      )}
+
       {isGraph && (
         <>
           <SegmentedToggle
@@ -96,17 +140,17 @@ export default function GraphToolbar({
                 if (next !== graphDetailMode) onToggleGraphDetail();
               }}
               minWidth="220px"
-              title="Pipeline stages vs full table graph"
+              title="Pipeline stages vs whole graph (P / W)"
               options={[
                 {
                   value: GRAPH_DETAIL_MODES.COMPOUND,
                   label: 'Pipeline stages',
-                  title: 'Macro stage boxes (current)',
+                  title: 'Macro stage boxes (P)',
                 },
                 {
                   value: GRAPH_DETAIL_MODES.FLAT,
-                  label: 'Full graph',
-                  title: 'Every table and join node (current)',
+                  label: 'Whole graph',
+                  title: 'Every table and join node (W)',
                 },
               ]}
             />
@@ -160,14 +204,16 @@ export default function GraphToolbar({
         </>
       )}
 
-      <button
-        style={actionBtn(diffMode)}
-        onClick={onToggleDiffMode}
-        title="Diff mode — compare with previous render"
-      >
-        ± Diff
-      </button>
-      {diffMode && diffSummary && (
+      {isGraph && (
+        <button
+          style={actionBtn(diffMode)}
+          onClick={onToggleDiffMode}
+          title="Diff mode — compare with previous render"
+        >
+          ± Diff
+        </button>
+      )}
+      {isGraph && diffMode && diffSummary && (
         <span style={{ color: t.textMuted, fontSize: '11px' }}>
           +{diffSummary.addedNodes} nodes, −{diffSummary.removedNodes} removed
         </span>
