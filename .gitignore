@@ -43,3 +43,4 @@ docs/assets/page@*
 
 # Ad-hoc SQL at repo root (tracked fixtures live under backend/tests/fixtures/)
 /*.sql
+/review.md
