@@ -1,5 +1,6 @@
-fastapi
-uvicorn
-sqlglot
-pydantic
-pytest
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+sqlglot==30.17.0
+pydantic==2.13.4
+httpx==0.28.1
+pytest==7.4.0
