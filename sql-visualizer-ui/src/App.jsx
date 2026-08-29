@@ -47,6 +47,7 @@ export default function App() {
     onViewGraph: () => graph.handleViewModeChange(VIEW_MODES.GRAPH),
     onViewTable: () => graph.handleViewModeChange(VIEW_MODES.TABLE),
     canSwitchView: graph.hasRenderedGraph && graph.studioMode === 'explore',
+    canFocusSearch: graph.hasRenderedGraph && graph.studioMode === 'explore',
     enabled: !graph.showShortcuts,
     zenMode: graph.zenMode,
     studioMode: graph.studioMode,
@@ -57,14 +58,16 @@ export default function App() {
     graph.handleInit(instance);
   };
 
-  const graphActions = {
-    onColumnSelect: graph.onColumnSelect,
-    onNodeExpandedToggle: graph.onNodeExpandedToggle,
-    onCompoundStageToggle: graph.handleCompoundStageToggle,
-  };
+  const graphActions = useMemo(
+    () => ({
+      onColumnSelect: graph.onColumnSelect,
+      onNodeExpandedToggle: graph.onNodeExpandedToggle,
+      onCompoundStageToggle: graph.handleCompoundStageToggle,
+    }),
+    [graph.onColumnSelect, graph.onNodeExpandedToggle, graph.handleCompoundStageToggle]
+  );
 
-  const isExplore = graph.studioMode === 'explore';
-  const shellPadding = graph.embedMode ? '0' : isExplore ? '8px' : '20px';
+  const shellPadding = graph.embedMode ? '0' : '20px';
 
   const isTableView =
     graph.viewMode === VIEW_MODES.TABLE &&
@@ -113,6 +116,7 @@ export default function App() {
           warnings={graph.warnings}
           parseError={graph.parseError}
           onDismissError={graph.handleDismissParseError}
+          onDismissWarnings={graph.handleDismissWarnings}
           onJumpToError={graph.handleJumpToError}
           sqlEditorRef={graph.sqlEditorRef}
           searchInputRef={graph.searchInputRef}
