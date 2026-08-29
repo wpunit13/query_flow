@@ -1,5 +1,6 @@
 import { VIEW_MODES } from '../utils/lineageTableModel';
 import { useTheme } from '../context/ThemeContext';
+import SegmentedToggle from './SegmentedToggle';
 
 function GraphIcon({ active, color, muted }) {
   return (
@@ -42,80 +43,30 @@ export default function ViewModeToggle({ viewMode, onViewModeChange, disabled })
   const { theme } = useTheme();
   const isGraph = viewMode === VIEW_MODES.GRAPH;
 
-  const optionStyle = (active) => ({
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '5px',
-    padding: '6px 12px',
-    fontSize: '11px',
-    fontWeight: '600',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    background: 'transparent',
-    color: active ? theme.primary : theme.textMuted,
-    zIndex: 1,
-    transition: 'color 0.2s ease',
-    whiteSpace: 'nowrap',
-  });
+  const graphLabel = (
+    <>
+      <GraphIcon active={isGraph} color={theme.primary} muted={theme.textMuted} />
+      Graph
+    </>
+  );
+  const tableLabel = (
+    <>
+      <TableIcon active={!isGraph} color={theme.primary} muted={theme.textMuted} />
+      Table
+    </>
+  );
 
   return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '8px',
-        opacity: disabled ? 0.45 : 1,
-      }}
+    <SegmentedToggle
+      value={viewMode}
+      onChange={onViewModeChange}
+      disabled={disabled}
       title={disabled ? 'Render a query first' : 'Switch graph / table view (G / T)'}
-    >
-      <div
-        style={{
-          position: 'relative',
-          display: 'flex',
-          width: '168px',
-          background: theme.toggleTrack,
-          borderRadius: '9px',
-          padding: '3px',
-          border: `1px solid ${theme.border}`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            top: '3px',
-            bottom: '3px',
-            left: isGraph ? '3px' : 'calc(50% + 1px)',
-            width: 'calc(50% - 4px)',
-            background: theme.toggleThumb,
-            borderRadius: '7px',
-            boxShadow: theme.shadowSubtle,
-            transition: 'left 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-        />
-        <button
-          type="button"
-          style={optionStyle(isGraph)}
-          onClick={() => !disabled && onViewModeChange(VIEW_MODES.GRAPH)}
-          disabled={disabled}
-          aria-pressed={isGraph}
-        >
-          <GraphIcon active={isGraph} color={theme.primary} muted={theme.textMuted} />
-          Graph
-        </button>
-        <button
-          type="button"
-          style={optionStyle(!isGraph)}
-          onClick={() => !disabled && onViewModeChange(VIEW_MODES.TABLE)}
-          disabled={disabled}
-          aria-pressed={!isGraph}
-        >
-          <TableIcon active={!isGraph} color={theme.primary} muted={theme.textMuted} />
-          Table
-        </button>
-      </div>
-    </div>
+      minWidth="168px"
+      options={[
+        { value: VIEW_MODES.GRAPH, label: graphLabel },
+        { value: VIEW_MODES.TABLE, label: tableLabel },
+      ]}
+    />
   );
 }

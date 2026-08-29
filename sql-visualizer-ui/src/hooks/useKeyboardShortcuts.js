@@ -18,6 +18,7 @@ export function useKeyboardShortcuts({
   zenMode = false,
   studioMode = 'author',
   canSwitchView = false,
+  canFocusSearch = false,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -29,13 +30,19 @@ export function useKeyboardShortcuts({
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable;
 
-      if (e.key === '/' && !isInput) {
+      if (e.key === '/' && !isInput && canFocusSearch) {
         e.preventDefault();
         onFocusSearch?.();
         return;
       }
 
-      if (isInput && e.key !== 'Escape') return;
+      if (e.key === 'Escape' && isInput) {
+        e.preventDefault();
+        target.blur();
+        return;
+      }
+
+      if (isInput) return;
 
       // Let the browser keep Cmd/Ctrl shortcuts (Cmd+R refresh, Cmd+F find, etc.).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -126,5 +133,6 @@ export function useKeyboardShortcuts({
     onViewGraph,
     onViewTable,
     canSwitchView,
+    canFocusSearch,
   ]);
 }

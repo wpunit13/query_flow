@@ -1,7 +1,7 @@
 import { useTheme } from '../context/ThemeContext';
 import { panelHeaderStyle } from '../theme/uiStyles';
 import { SearchIcon } from '../icons';
-import ThemeToggle from './ThemeToggle';
+import HeaderActionGroup from './HeaderActionGroup';
 
 function sqlSummary(sql) {
   const lines = sql.split('\n');
@@ -40,7 +40,6 @@ export default function ExploreSummaryBar({
         alignItems: 'center',
         gap: '12px',
         flexWrap: 'wrap',
-        marginBottom: '8px',
       }}
     >
       <div style={{ flex: '1 1 200px', minWidth: 0 }}>
@@ -117,59 +116,14 @@ export default function ExploreSummaryBar({
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <ThemeToggle size="sm" />
-        <button
-          type="button"
-          onClick={onEnterAuthor}
-          style={{
-            padding: '7px 14px',
-            background: theme.cardBg,
-            border: `1px solid ${theme.border}`,
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            color: theme.textMain,
-          }}
-          title="Edit SQL (E)"
-        >
-          Edit SQL
-        </button>
-        <button
-          type="button"
-          onClick={onReset}
-          style={{
-            padding: '7px 12px',
-            background: theme.cardBg,
-            border: `1px solid ${theme.border}`,
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            color: theme.textMain,
-          }}
-        >
-          Reset
-        </button>
-        <button
-          type="button"
-          onClick={onParse}
-          disabled={loading}
-          style={{
-            padding: '7px 18px',
-            background: loading ? theme.disabled : theme.primary,
-            color: theme.onPrimary,
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '600',
-            cursor: loading ? 'default' : 'pointer',
-          }}
-        >
-          {loading ? 'Parsing…' : 'Render DAG'}
-        </button>
-      </div>
+      <HeaderActionGroup
+        modeSwitchLabel="Edit"
+        onModeSwitch={onEnterAuthor}
+        modeSwitchTitle="Edit SQL (E)"
+        onReset={onReset}
+        onParse={onParse}
+        loading={loading}
+      />
     </div>
   );
 }

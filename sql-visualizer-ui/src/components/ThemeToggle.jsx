@@ -17,10 +17,11 @@ function MoonIcon() {
   );
 }
 
-/** Shows current theme; click to switch. Single control in the app header. */
-export default function ThemeToggle({ size = 'md', showLabel = true }) {
+/** Shows current theme; click to switch. Icon-only by default — use title for label. */
+export default function ThemeToggle({ size = 'md', showLabel = false }) {
   const { theme, isDark, toggleMode } = useTheme();
-  const padding = size === 'sm' ? '6px 10px' : '8px 12px';
+  const iconOnly = !showLabel;
+  const padding = iconOnly ? 0 : size === 'sm' ? '6px 10px' : '8px 12px';
   const fontSize = size === 'sm' ? '11px' : '12px';
   const modeLabel = isDark ? 'Dark' : 'Light';
   const title = isDark
@@ -37,7 +38,9 @@ export default function ThemeToggle({ size = 'md', showLabel = true }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '6px',
+        gap: showLabel ? '6px' : 0,
+        width: iconOnly ? '34px' : undefined,
+        height: iconOnly ? '34px' : undefined,
         padding,
         border: `1px solid ${theme.border}`,
         borderRadius: '6px',

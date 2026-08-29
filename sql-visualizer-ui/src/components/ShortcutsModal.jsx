@@ -7,7 +7,7 @@ export default function ShortcutsModal({ open, onClose }) {
   if (!open) return null;
 
   const shortcuts = [
-    { keys: '/', desc: 'Focus search' },
+    { keys: '/', desc: 'Focus search (explore mode)' },
     { keys: 'F', desc: 'Fit graph to view' },
     { keys: 'R', desc: 'Reset canvas' },
     { keys: 'Esc', desc: 'Exit zen, or clear selection / focus' },

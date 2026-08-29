@@ -2,9 +2,10 @@ import { LAYOUT_MODES } from '../utils/dagreLayout';
 import { VIEW_MODES } from '../utils/lineageTableModel';
 import { GRAPH_DETAIL_MODES } from '../constants/graphDetailMode';
 import { useTheme } from '../context/ThemeContext';
-import { toolbarButtonStyle, inputFieldStyle } from '../theme/uiStyles';
+import { inputFieldStyle } from '../theme/uiStyles';
 import ExportMenu from './ExportMenu';
 import ViewModeToggle from './ViewModeToggle';
+import SegmentedToggle from './SegmentedToggle';
 
 export default function GraphToolbar({
   viewMode,
@@ -39,7 +40,19 @@ export default function GraphToolbar({
 }) {
   const { theme: t } = useTheme();
   const isGraph = viewMode === VIEW_MODES.GRAPH;
-  const btn = (active, disabled = false) => toolbarButtonStyle(t, active, disabled);
+
+  const actionBtn = (active, disabled = false) => ({
+    padding: '6px 10px',
+    fontSize: '11px',
+    fontWeight: '600',
+    border: `1px solid ${active ? t.primary : t.border}`,
+    borderRadius: '6px',
+    background: active ? t.buttonActiveBg : t.buttonBg,
+    color: active ? t.primary : t.textMain,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    whiteSpace: 'nowrap',
+  });
 
   return (
     <div
@@ -66,32 +79,37 @@ export default function GraphToolbar({
 
       {isGraph && (
         <>
-          <span style={{ color: t.textMuted, fontWeight: '600' }}>Layout</span>
-          <button
-            style={btn(layoutMode === LAYOUT_MODES.TB)}
-            onClick={() => onLayoutChange(LAYOUT_MODES.TB)}
-            title="Top to bottom (1)"
-          >
-            ↓ TB
-          </button>
-          <button
-            style={btn(layoutMode === LAYOUT_MODES.LR)}
-            onClick={() => onLayoutChange(LAYOUT_MODES.LR)}
-            title="Left to right (2)"
-          >
-            → LR
-          </button>
+          <SegmentedToggle
+            value={layoutMode}
+            onChange={onLayoutChange}
+            minWidth="132px"
+            options={[
+              { value: LAYOUT_MODES.TB, label: '↓ TB', title: 'Top to bottom (1)' },
+              { value: LAYOUT_MODES.LR, label: '→ LR', title: 'Left to right (2)' },
+            ]}
+          />
 
           {compoundGraphEligible && (
-            <button
-              style={btn(graphDetailMode === GRAPH_DETAIL_MODES.COMPOUND)}
-              onClick={onToggleGraphDetail}
+            <SegmentedToggle
+              value={graphDetailMode}
+              onChange={(next) => {
+                if (next !== graphDetailMode) onToggleGraphDetail();
+              }}
+              minWidth="220px"
               title="Pipeline stages vs full table graph"
-            >
-              {graphDetailMode === GRAPH_DETAIL_MODES.COMPOUND
-                ? 'Full graph'
-                : 'Pipeline stages'}
-            </button>
+              options={[
+                {
+                  value: GRAPH_DETAIL_MODES.COMPOUND,
+                  label: 'Pipeline stages',
+                  title: 'Macro stage boxes (current)',
+                },
+                {
+                  value: GRAPH_DETAIL_MODES.FLAT,
+                  label: 'Full graph',
+                  title: 'Every table and join node (current)',
+                },
+              ]}
+            />
           )}
 
           <span style={{ color: t.border, margin: '0 4px' }}>|</span>
@@ -101,6 +119,13 @@ export default function GraphToolbar({
             placeholder="Filter branch…"
             value={branchFilter}
             onChange={(e) => onBranchFilterChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                onBranchFilterChange('');
+                e.currentTarget.blur();
+              }
+            }}
             style={inputFieldStyle(t, { error: filterNoMatches, width: '140px' })}
           />
           {filterNoMatches && (
@@ -110,7 +135,7 @@ export default function GraphToolbar({
           <span style={{ color: t.border, margin: '0 4px' }}>|</span>
 
           <button
-            style={btn(focusMode === 'upstream', !selectedNodeId)}
+            style={actionBtn(focusMode === 'upstream', !selectedNodeId)}
             onClick={onFocusUpstream}
             disabled={!selectedNodeId}
             title="Focus upstream (U)"
@@ -118,7 +143,7 @@ export default function GraphToolbar({
             ↑ Upstream
           </button>
           <button
-            style={btn(focusMode === 'downstream', !selectedNodeId)}
+            style={actionBtn(focusMode === 'downstream', !selectedNodeId)}
             onClick={onFocusDownstream}
             disabled={!selectedNodeId}
             title="Focus downstream (D)"
@@ -126,7 +151,7 @@ export default function GraphToolbar({
             ↓ Downstream
           </button>
           {focusMode && (
-            <button style={btn(false)} onClick={onClearFocus} title="Clear focus (Esc)">
+            <button style={actionBtn(false)} onClick={onClearFocus} title="Clear focus (Esc)">
               Clear focus
             </button>
           )}
@@ -136,7 +161,7 @@ export default function GraphToolbar({
       )}
 
       <button
-        style={btn(diffMode)}
+        style={actionBtn(diffMode)}
         onClick={onToggleDiffMode}
         title="Diff mode — compare with previous render"
       >
@@ -150,7 +175,7 @@ export default function GraphToolbar({
 
       {studioMode === 'explore' && isGraph && (
         <button
-          style={btn(zenMode)}
+          style={actionBtn(zenMode)}
           onClick={onToggleZen}
           title="Zen mode — full-screen graph (Z)"
         >
@@ -182,7 +207,7 @@ export default function GraphToolbar({
         }}
       >
         <button
-          style={btn(false)}
+          style={actionBtn(false)}
           onClick={onShowShortcuts}
           title="Keyboard shortcuts"
         >

@@ -271,3 +271,8 @@ export function getDefaultExpandedStageId(nodes) {
 export function getDefaultTableTab(nodes) {
   return isPipelineQuery(nodes) ? TABLE_TABS.PIPELINE : TABLE_TABS.SOURCES;
 }
+
+/** Table tab when a large graph auto-opens table overview (not graph view). */
+export function getLargeQueryOverviewTableTab() {
+  return TABLE_TABS.OUTPUT;
+}

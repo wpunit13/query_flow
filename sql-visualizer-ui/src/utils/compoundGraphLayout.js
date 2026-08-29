@@ -418,7 +418,6 @@ export function buildCompoundGraphDisplay({
         id: meta.groupId,
         type: 'stageGroupNode',
         position: basePos,
-        draggable: true,
         width: groupWidth,
         height: groupHeight,
         style: {
@@ -461,7 +460,6 @@ export function buildCompoundGraphDisplay({
         id: meta.groupId,
         type: 'stageGroupNode',
         position: basePos,
-        draggable: true,
         style: {
           width: measuredSize.width,
           height: measuredSize.height,
